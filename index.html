@@ -90,7 +90,14 @@ const AZFIN = {
   ]
 };
 
-const ALL_SYMBOLS = [...AZFIN.tanCong, ...AZFIN.canBang, ...AZFIN.phongThu].map(s => s.ma);
+const ETF_LIST = [
+  { ma: "E1VFVN30", ten: "VFM VN30 ETF" },
+  { ma: "FUEVFVND", ten: "VFMVF1 ETF" },
+  { ma: "FUEVN100", ten: "VN100 ETF" },
+  { ma: "FUESSVFL", ten: "SSI SCA ETF" },
+  { ma: "FUEDCMID", ten: "DCVFM Diamond ETF" },
+];
+const ALL_SYMBOLS = [...AZFIN.tanCong, ...AZFIN.canBang, ...AZFIN.phongThu, ...ETF_LIST].map(s => s.ma);
 const GROUP_META = {
   tanCong:  { label: "Tấn công",  icon: "🗡", color: "#3b82f6" },
   canBang:  { label: "Cân bằng",  icon: "⚖", color: "#f59e0b" },
@@ -110,9 +117,12 @@ function useLS(key, def) {
   const [val, setVal] = useState(() => {
     try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : def; } catch { return def; }
   });
-  const save = useCallback(v => {
-    setVal(v);
-    try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
+  const save = useCallback(updater => {
+    setVal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+      return next;
+    });
   }, [key]);
   return [val, save];
 }
@@ -201,6 +211,13 @@ async function tryVNDirect(symbols) {
   });
   return map;
 }
+// Fetch ATH from VNDirect historical data (sort by close price descending)
+async function fetchHistoricalATH() {
+  const r = await fetch("/api/ath");
+  if (!r.ok) return {};
+  return await r.json();
+}
+
 async function fetchPrices(symbols, addLog) {
   const sources = [
     { name: "Local Proxy",    fn: () => tryLocalProxy() },
@@ -240,16 +257,15 @@ async function fetchCryptoPrices() {
   } catch {}
   try {
     const ids = COINS_DEF.map(c => c.cgId).join(",");
-    const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`);
+    const r = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&order=market_cap_desc&sparkline=false`);
     if (r.ok) {
-      const d = await r.json();
-      const idMap = { bitcoin:"BTC", ethereum:"ETH", binancecoin:"BNB", okb:"OKB", "bitget-token":"BGB" };
+      const data = await r.json();
       const map = {};
-      Object.entries(d).forEach(([cgId, v]) => {
-        const coin = idMap[cgId];
-        if (coin) map[coin] = { price: v.usd, change24h: v.usd_24h_change };
+      data.forEach(item => {
+        const coinDef = COINS_DEF.find(c => c.cgId === item.id);
+        if (coinDef) map[coinDef.id] = { price: item.current_price, change24h: item.price_change_percentage_24h, ath: item.ath };
       });
-      return { map, source: "CoinGecko" };
+      if (Object.keys(map).length >= 3) return { map, source: "CoinGecko" };
     }
   } catch {}
   return { map: {}, source: null };
@@ -368,10 +384,24 @@ function BarCell({ val }) {
   );
 }
 
+// ── ATH Drop Cell ─────────────────────────────────────────────────────────────
+function ATHDropCell({ ath, giaHT, isCrypto }) {
+  if (!ath || !giaHT) return <td style={{padding:"8px 12px",color:"#475569"}}>—</td>;
+  const drop = Math.round(((ath - giaHT) / ath) * 100);
+  const color = drop <= 10 ? "#4ade80" : drop <= 30 ? "#fbbf24" : "#f87171";
+  const athLabel = isCrypto ? fUSD(ath) : (ath/1000).toFixed(1)+"k";
+  return (
+    <td style={{padding:"8px 12px"}}>
+      <div style={{color, fontWeight:700, fontSize:12}}>-{drop}%</div>
+      <div style={{fontSize:10, color:"#475569"}}>{athLabel}</div>
+    </td>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // ── SECTION: Stock Watchlist (AzFin) ─────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-function StockWatchlist({ prices, priceSource }) {
+function StockWatchlist({ prices, priceSource, athMap, athLoading }) {
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("pct");
@@ -384,8 +414,10 @@ function StockWatchlist({ prices, priceSource }) {
   ].map(s => {
     const p = prices[s.ma];
     const giaHT = p?.lastPrice || null;
-    return { ...s, giaHT, changePct: p?.changePct ?? null, pct: pctFromTS(giaHT, s.ngungTS) };
-  }), [prices]);
+    const ath = athMap[s.ma] || null;
+    const athDrop = (ath && giaHT) ? Math.round(((ath - giaHT) / ath) * 100) : null;
+    return { ...s, giaHT, changePct: p?.changePct ?? null, pct: pctFromTS(giaHT, s.ngungTS), ath, athDrop };
+  }), [prices, athMap]);
 
   const filtered = allStocks
     .filter(s => (tab==="all"||s.nhom===tab) && s.ma.toLowerCase().includes(search.toLowerCase()))
@@ -428,7 +460,8 @@ function StockWatchlist({ prices, priceSource }) {
                   <tr style={{background:"#111827"}}>
                     {[
                       {k:"ma",l:"Cổ phiếu",s:0},{k:"ngungTS",l:"Ngưỡng TS",s:1},{k:"baoVe",l:"Bảo vệ TQ",s:1},
-                      {k:"giaHT",l:"Giá HT ⚡",s:1,hi:1},{k:"pct",l:"% cách ngưỡng",s:1},{k:"changePct",l:"% thay đổi",s:1},
+                      {k:"giaHT",l:"Giá HT ⚡",s:1,hi:1},{k:"ath",l:athLoading?"ATH ⏳":"ATH",s:1},{k:"athDrop",l:"Drawdown",s:1},
+                      {k:"pct",l:"% cách ngưỡng",s:1},{k:"changePct",l:"% thay đổi",s:1},
                     ].map(col => (
                       <th key={col.k} onClick={col.s?()=>toggle(col.k):undefined}
                         style={{padding:"9px 12px",textAlign:"left",color:col.hi?"#38bdf8":"#64748b",fontWeight:600,whiteSpace:"nowrap",borderBottom:"1px solid #1e293b",cursor:col.s?"pointer":"default",userSelect:"none"}}>
@@ -449,6 +482,10 @@ function StockWatchlist({ prices, priceSource }) {
                           {s.giaHT ? <span style={{color:"#38bdf8",fontWeight:700,fontSize:13}}>{(s.giaHT/1000).toFixed(1)}</span>
                                    : <span style={{color:"#334155",fontSize:10}}>—</span>}
                         </td>
+                        <td style={{padding:"8px 12px",color:"#94a3b8",fontSize:12}}>
+                          {athMap[s.ma] ? (athMap[s.ma]/1000).toFixed(1) : athLoading ? <span style={{color:"#475569",fontSize:10}}>⏳</span> : "—"}
+                        </td>
+                        <ATHDropCell ath={athMap[s.ma]} giaHT={s.giaHT}/>
                         <td style={{padding:"8px 12px"}}><BarCell val={s.pct}/></td>
                         <td style={{padding:"8px 12px",color:tdc,fontWeight:700}}>
                           {s.changePct!==null ? (s.changePct>=0?"+":"")+s.changePct.toFixed(2)+"%" : "—"}
@@ -458,6 +495,8 @@ function StockWatchlist({ prices, priceSource }) {
                   })}
                   <tr style={{background:"#1e293b",fontWeight:700,borderLeft:`3px solid ${meta.color}`}}>
                     <td colSpan={4} style={{padding:"8px 12px",color:meta.color}}>Trung bình</td>
+                    <td style={{padding:"8px 12px"}}/>
+                    <td style={{padding:"8px 12px"}}/>
                     <td style={{padding:"8px 12px"}}>{avgPct!==null && <BarCell val={avgPct}/>}</td>
                     <td style={{padding:"8px 12px",color:avgTD&&parseFloat(avgTD)>=0?"#4ade80":"#f87171"}}>
                       {avgTD?(parseFloat(avgTD)>=0?"+":"")+avgTD+"%":"—"}
@@ -619,10 +658,9 @@ function StockPortfolio({ prices }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── SECTION: Crypto Portfolio ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-function CryptoSection({ usdvnd }) {
+function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCryptoAth }) {
   const [holdings, setHoldings] = useLS("azfin_crypto_holdings",
     COINS_DEF.reduce((acc,c) => ({...acc,[c.id]:{soLuong:0,giaMuaTB:0,gridProfit:0}}),{}));
-  const [cryptoPrices, setCryptoPrices] = useState({});
   const [priceSource, setPriceSource] = useState(null);
   const [loading, setLoading] = useState(false);
   const [editCoin, setEditCoin] = useState(null);
@@ -633,6 +671,14 @@ function CryptoSection({ usdvnd }) {
     const { map, source } = await fetchCryptoPrices();
     setCryptoPrices(map);
     setPriceSource(source);
+    setCryptoAth(prev => {
+      const updated = {...prev};
+      for (const [coin, data] of Object.entries(map)) {
+        if (data.ath) { updated[coin] = data.ath; }
+        else if (!updated[coin] || data.price > updated[coin]) { updated[coin] = data.price; }
+      }
+      return updated;
+    });
     setLoading(false);
   }, []);
 
@@ -659,7 +705,7 @@ function CryptoSection({ usdvnd }) {
     const vonVND = vonUSD * usdvnd;
     const pnlVND = pnlUSD * usdvnd;
     const gridVND = (h.gridProfit||0) * usdvnd;
-    return {...c, ...h, price, change24h, vonUSD, htUSD, pnlUSD, pnlPct, vonVND, pnlVND, gridVND};
+    return {...c, ...h, price, change24h, vonUSD, htUSD, pnlUSD, pnlPct, vonVND, pnlVND, gridVND, ath: cryptoAth[c.id] || 0};
   });
 
   const totalVon = rows.reduce((a,r)=>a+r.vonUSD,0);
@@ -712,7 +758,7 @@ function CryptoSection({ usdvnd }) {
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
           <thead>
             <tr style={{background:"#111827"}}>
-              {["Coin","Số lượng","Giá mua TB","Giá HT","24h","Vốn (USD)","Giá trị HT","Lãi/Lỗ","Tỷ suất","Grid Profit",""].map(h => (
+              {["Coin","Số lượng","Giá mua TB","Giá HT","ATH","% từ ATH","24h","Vốn (USD)","Giá trị HT","Lãi/Lỗ","Tỷ suất","Grid Profit",""].map(h => (
                 <th key={h} style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontWeight:600,whiteSpace:"nowrap",borderBottom:"1px solid #1e293b"}}>{h}</th>
               ))}
             </tr>
@@ -732,6 +778,8 @@ function CryptoSection({ usdvnd }) {
                 <td style={{padding:"8px 12px",color:"#94a3b8"}}>{r.soLuong||"—"}</td>
                 <td style={{padding:"8px 12px",color:"#94a3b8"}}>{r.giaMuaTB?fUSD(r.giaMuaTB):"—"}</td>
                 <td style={{padding:"8px 12px",color:"#38bdf8",fontWeight:700}}>{r.price?fUSD(r.price):"—"}</td>
+                <td style={{padding:"8px 12px",color:"#94a3b8"}}>{r.ath?fUSD(r.ath):"—"}</td>
+                <ATHDropCell ath={r.ath||null} giaHT={r.price||null} isCrypto={true}/>
                 <td style={{padding:"8px 12px",color:pctColor(r.change24h),fontWeight:700}}>
                   {r.change24h?(r.change24h>=0?"+":"")+r.change24h.toFixed(2)+"%":"—"}
                 </td>
@@ -976,6 +1024,241 @@ function AiSection({ prices, priceSource, now }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ── SECTION: Fund (ETF) Management ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function FundSection({ prices, athMap, athLoading }) {
+  return (
+    <div>
+      <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontWeight:700,fontSize:16,color:"#38bdf8"}}>📊 Quản lý Chứng chỉ Quỹ ETF</span>
+        <span style={{fontSize:11,color:"#475569"}}>{ETF_LIST.length} quỹ theo dõi</span>
+      </div>
+      <div style={{borderRadius:12,overflow:"hidden",border:"1px solid #3b82f644"}}>
+        <div style={{background:"linear-gradient(90deg,#3b82f622,transparent)",padding:"10px 16px",borderBottom:"1px solid #3b82f633"}}>
+          <span style={{fontWeight:700,fontSize:14,color:"#3b82f6"}}>📊 Danh sách ETF</span>
+        </div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr style={{background:"#111827"}}>
+                {[
+                  {l:"Mã Quỹ"},{l:"Tên quỹ"},{l:"Giá HT ⚡",hi:1},
+                  {l:athLoading?"ATH ⏳":"ATH"},{l:"% từ ATH"},{l:"% thay đổi"},
+                ].map(col => (
+                  <th key={col.l} style={{padding:"9px 12px",textAlign:"left",color:col.hi?"#38bdf8":"#64748b",fontWeight:600,whiteSpace:"nowrap",borderBottom:"1px solid #1e293b"}}>{col.l}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ETF_LIST.map((etf, i) => {
+                const p = prices[etf.ma] || {};
+                const giaHT = p.lastPrice || null;
+                const ath = athMap[etf.ma] || null;
+                const tdc = p.changePct == null ? "#475569" : p.changePct >= 0 ? "#4ade80" : "#f87171";
+                return (
+                  <tr key={etf.ma} style={{background:i%2===0?"#0a0f1e":"#0d1526",borderLeft:"3px solid #3b82f655"}}>
+                    <td style={{padding:"8px 12px",fontWeight:700,fontSize:13,color:"#fff"}}>{etf.ma}</td>
+                    <td style={{padding:"8px 12px",color:"#94a3b8",fontSize:11}}>{etf.ten}</td>
+                    <td style={{padding:"8px 12px"}}>
+                      {giaHT ? <span style={{color:"#38bdf8",fontWeight:700,fontSize:13}}>{(giaHT/1000).toFixed(1)}</span>
+                             : <span style={{color:"#334155",fontSize:10}}>—</span>}
+                    </td>
+                    <td style={{padding:"8px 12px",color:"#94a3b8",fontSize:12}}>
+                      {ath ? (ath/1000).toFixed(1) : athLoading ? <span style={{color:"#475569",fontSize:10}}>⏳</span> : "—"}
+                    </td>
+                    <ATHDropCell ath={ath} giaHT={giaHT}/>
+                    <td style={{padding:"8px 12px",color:tdc,fontWeight:700}}>
+                      {p.changePct != null ? (p.changePct>=0?"+":"")+p.changePct.toFixed(2)+"%" : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style={{marginTop:12,display:"flex",gap:12,flexWrap:"wrap"}}>
+        {[["#4ade80","0–10% từ ATH (gần đỉnh)"],["#fbbf24","10–30% từ ATH (trung bình)"],["#f87171",">30% từ ATH (xa đỉnh)"]].map(([c,l]) => (
+          <div key={l} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#64748b"}}>
+            <div style={{width:10,height:10,borderRadius:2,background:c}}/>{l}
+          </div>
+        ))}
+      </div>
+      <div style={{marginTop:10,padding:"8px 14px",background:"#1e293b",borderRadius:8,fontSize:11,color:"#64748b"}}>
+        ℹ️ ATH tự động cập nhật theo giá cao nhất đã quan sát. Giá HT tính theo đơn vị nghìn đồng (k).
+      </div>
+    </div>
+  );
+}
+
+// ── Alert helpers ─────────────────────────────────────────────────────────────
+function computeAlerts(prices, athMap, cryptoAth, cryptoPrices) {
+  const alerts = [];
+
+  for (const bucket of [AZFIN.tanCong, AZFIN.canBang, AZFIN.phongThu]) {
+    for (const stock of bucket) {
+      const p = prices[stock.ma]; const ath = athMap[stock.ma];
+      if (!p?.lastPrice || !ath) continue;
+      const dd = ((p.lastPrice - ath) / ath) * 100;
+      const level = dd <= -58 ? "BUY_NOW" : dd <= -55 ? "APPROACHING" : null;
+      if (!level) continue;
+      alerts.push({ key:`${stock.ma}_${level==="BUY_NOW"?"buy_now":"approaching"}`,
+        type:"stock", symbol:stock.ma, currentPrice:p.lastPrice, ath, drawdown:dd, level });
+    }
+  }
+
+  for (const etf of ETF_LIST) {
+    const sym = typeof etf === "string" ? etf : etf.ma;
+    const p = prices[sym]; const ath = athMap[sym];
+    if (!p?.lastPrice || !ath) continue;
+    const dd = ((p.lastPrice - ath) / ath) * 100;
+    const level = dd <= -30 ? "BUY_NOW" : dd <= -25 ? "APPROACHING" : null;
+    if (!level) continue;
+    alerts.push({ key:`${sym}_${level==="BUY_NOW"?"buy_now":"approaching"}`,
+      type:"etf", symbol:sym, currentPrice:p.lastPrice, ath, drawdown:dd, level });
+  }
+
+  for (const coin of COINS_DEF) {
+    if (!coin.isGrid) continue;
+    const ath = cryptoAth[coin.id]; const p = cryptoPrices[coin.id];
+    if (!p?.price || !ath) continue;
+    const dd = ((p.price - ath) / ath) * 100;
+    const threshold = coin.id === "BTC" ? -40 : -50;
+    if (dd >= threshold) continue;
+    const [gridTop, gridBottom] = coin.id === "BTC" ? [0.6*ath, 0.3*ath] : [0.5*ath, 0.2*ath];
+    alerts.push({ key:`${coin.id}_grid`, type:"crypto", symbol:coin.id,
+      currentPrice:p.price, ath, drawdown:dd, level:"GRID_FUTURE", gridTop, gridBottom });
+  }
+
+  return alerts;
+}
+
+function sendAlertNotif(alert) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const labels = { BUY_NOW:"⚡ Mua Ngay!", APPROACHING:"👀 Sắp tới ngưỡng", GRID_FUTURE:"🤖 Grid Future" };
+  const priceStr = alert.type === "crypto"
+    ? "$" + alert.currentPrice.toLocaleString()
+    : (alert.currentPrice/1000).toFixed(1) + "k";
+  new Notification(`AzFin: ${alert.symbol}`, {
+    body: `${labels[alert.level]} — Giá: ${priceStr} | Drawdown: ${alert.drawdown.toFixed(1)}%`,
+    tag: alert.key,
+  });
+}
+
+// ── Alert Tab Component ───────────────────────────────────────────────────────
+function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze }) {
+  const SNOOZE_OPTS = [
+    { l:"1 ngày",  ms: 86400000 },
+    { l:"1 tuần",  ms: 604800000 },
+    { l:"1 tháng", ms: 2592000000 },
+    { l:"3 tháng", ms: 7776000000 },
+  ];
+  const snooze = (key, ms) =>
+    setAlertSnooze(prev => ({ ...prev, [key]: Date.now() + ms }));
+
+  const snoozed = Object.entries(alertSnooze).filter(([,v]) => v > Date.now());
+
+  const LEVEL_STYLE = {
+    BUY_NOW:     { bg:"#ef4444", label:"⚡ Mua Ngay!" },
+    APPROACHING: { bg:"#f59e0b", label:"👀 Sắp tới ngưỡng" },
+    GRID_FUTURE: { bg:"#3b82f6", label:"🤖 Grid Future" },
+  };
+
+  return (
+    <div>
+      <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontWeight:700,fontSize:16,color:"#38bdf8"}}>🔔 Cảnh báo Đầu tư</span>
+        <span style={{fontSize:11,color:"#475569"}}>{activeAlerts.length} cảnh báo đang hoạt động</span>
+        {activeAlerts.length === 0 && (
+          <span style={{color:"#4ade80",fontSize:13}}>✅ Giá đang ổn, không có cảnh báo nào</span>
+        )}
+      </div>
+
+      {activeAlerts.map(a => {
+        const { bg, label } = LEVEL_STYLE[a.level];
+        const priceStr = a.type === "crypto"
+          ? "$" + a.currentPrice.toLocaleString("en-US", {maximumFractionDigits:2})
+          : (a.currentPrice/1000).toFixed(1) + "k";
+        const athStr = a.type === "crypto"
+          ? "$" + a.ath.toLocaleString("en-US", {maximumFractionDigits:2})
+          : (a.ath/1000).toFixed(1) + "k";
+        return (
+          <div key={a.key} style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",
+            marginBottom:10,borderLeft:`4px solid ${bg}`,border:`1px solid ${bg}44`}}>
+            <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6,flexWrap:"wrap"}}>
+              <span style={{background:bg,color:"#fff",borderRadius:4,padding:"2px 10px",
+                fontSize:11,fontWeight:700}}>{label}</span>
+              <span style={{fontWeight:700,fontSize:15,color:"#fff"}}>{a.symbol}</span>
+              <span style={{fontSize:11,color:"#64748b",background:"#0f172a",
+                borderRadius:4,padding:"1px 8px"}}>
+                {a.type==="stock"?"Cổ phiếu":a.type==="etf"?"Quỹ/ETF":"Crypto"}
+              </span>
+            </div>
+            <div style={{fontSize:12,color:"#cbd5e1",marginBottom:4}}>
+              Giá HT: <b style={{color:"#38bdf8"}}>{priceStr}</b>
+              &nbsp;·&nbsp;ATH: <b style={{color:"#94a3b8"}}>{athStr}</b>
+              &nbsp;·&nbsp;<span style={{color:"#f87171",fontWeight:700}}>Drawdown: {a.drawdown.toFixed(1)}%</span>
+            </div>
+            {a.level === "GRID_FUTURE" && (
+              <div style={{fontSize:12,color:"#93c5fd",marginBottom:6,background:"#1e40af22",
+                borderRadius:6,padding:"6px 10px",marginTop:4}}>
+                🤖 Grid Future &nbsp;|&nbsp;
+                Lưới trên: <b>${a.gridTop.toLocaleString("en-US",{maximumFractionDigits:0})}</b>
+                &nbsp;→&nbsp;
+                Lưới dưới: <b>${a.gridBottom.toLocaleString("en-US",{maximumFractionDigits:0})}</b>
+              </div>
+            )}
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8,alignItems:"center"}}>
+              <span style={{fontSize:11,color:"#475569"}}>Tắt thông báo:</span>
+              {SNOOZE_OPTS.map(opt => (
+                <button key={opt.l} onClick={() => snooze(a.key, opt.ms)}
+                  style={{background:"#334155",color:"#94a3b8",border:"none",borderRadius:5,
+                    padding:"3px 12px",fontSize:11,cursor:"pointer",fontWeight:500}}>
+                  {opt.l}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {snoozed.length > 0 && (
+        <details style={{marginTop:16}}>
+          <summary style={{cursor:"pointer",color:"#475569",fontSize:12,userSelect:"none"}}>
+            ⏸ Đã tắt tạm thời ({snoozed.length} cảnh báo)
+          </summary>
+          <div style={{marginTop:8,background:"#0f172a",borderRadius:8,padding:"8px 12px"}}>
+            {snoozed.map(([key, until]) => (
+              <div key={key} style={{display:"flex",gap:10,alignItems:"center",
+                padding:"5px 0",borderBottom:"1px solid #1e293b",fontSize:11}}>
+                <span style={{color:"#94a3b8",flex:1}}>{key}</span>
+                <span style={{color:"#475569"}}>
+                  Hết hạn: {new Date(until).toLocaleString("vi-VN")}
+                </span>
+                <button onClick={() => setAlertSnooze(prev => {
+                    const n = {...prev}; delete n[key]; return n;
+                  })}
+                  style={{background:"#334155",color:"#e2e8f0",border:"none",
+                    borderRadius:4,padding:"2px 8px",fontSize:10,cursor:"pointer"}}>
+                  Hủy
+                </button>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      <div style={{marginTop:16,padding:"10px 14px",background:"#1e293b",borderRadius:8,
+        fontSize:11,color:"#64748b",borderTop:"1px solid #334155"}}>
+        ℹ️ Drawdown tính từ ATH. Cổ phiếu: ≤-58% mua ngay / -55% đến -57% sắp đến ngưỡng.
+        ETF: ≤-30% mua ngay / -25% đến -29% cảnh báo.
+        Crypto: BTC ≤-40% / ETH,BNB ≤-50% → Grid Future.
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 function App() {
@@ -989,17 +1272,75 @@ function App() {
   const [showLog, setShowLog] = useState(false);
   const [now, setNow] = useState(new Date());
   const [usdvnd, setUsdvnd] = useLS("azfin_usdvnd", 25500);
+  const [athMap, setAthMap] = useLS("azfin_ath_v1", {});
+  const [athLoading, setAthLoading] = useState(false);
+  const [cryptoAth, setCryptoAth] = useLS("azfin_crypto_ath_v1", {});
+  const [cryptoPrices, setCryptoPrices] = useState({});
+  const [alertSnooze, setAlertSnooze] = useLS("azfin_alert_snooze", {});
+  const [activeAlerts, setActiveAlerts] = useState([]);
+  const prevAlertsRef = useRef([]);
 
   useEffect(() => { const t=setInterval(()=>setNow(new Date()),1000); return ()=>clearInterval(t); },[]);
+
+  const updateATH = useCallback((pricesData) => {
+    setAthMap(prev => {
+      const updated = {...prev};
+      for (const [code, data] of Object.entries(pricesData)) {
+        if (data.lastPrice && (!updated[code] || data.lastPrice > updated[code])) {
+          updated[code] = data.lastPrice;
+        }
+      }
+      return updated;
+    });
+  }, []);
+
+  const loadATH = useCallback(async () => {
+    const cacheTime = parseInt(localStorage.getItem('azfin_ath_time') || '0');
+    if (Date.now() - cacheTime < 24 * 60 * 60 * 1000 && Object.keys(athMap).length > 50) return;
+    setAthLoading(true);
+    try {
+      const newAth = await fetchHistoricalATH();
+      if (Object.keys(newAth).length > 0) {
+        setAthMap(prev => {
+          const merged = {...prev};
+          for (const [code, ath] of Object.entries(newAth)) {
+            merged[code] = Math.max(merged[code] || 0, ath);
+          }
+          return merged;
+        });
+        localStorage.setItem('azfin_ath_time', String(Date.now()));
+      }
+    } catch {}
+    setAthLoading(false);
+  }, [athMap]);
 
   const load = useCallback(async () => {
     const logArr=[];
     const addLog = msg => { logArr.push(msg); setLastLog(msg); setLogs([...logArr]); };
     const { map, source } = await fetchPrices(ALL_SYMBOLS, addLog);
-    if (Object.keys(map).length) { setPrices(map); setSource(source); setUpdated(new Date()); }
-  }, []);
+    if (Object.keys(map).length) { setPrices(map); setSource(source); setUpdated(new Date()); updateATH(map); }
+  }, [updateATH]);
 
   useEffect(() => { load(); const t=setInterval(load,60000); return ()=>clearInterval(t); },[load]);
+  useEffect(() => { loadATH(); }, []);
+
+  useEffect(() => {
+    if (!Object.keys(prices).length && !Object.keys(cryptoPrices).length) return;
+    const allTriggered = computeAlerts(prices, athMap, cryptoAth, cryptoPrices);
+    const nowTs = Date.now();
+    const nonSnoozed = allTriggered.filter(a => {
+      const until = alertSnooze[a.key]; return !until || until < nowTs;
+    });
+    const prevKeys = new Set(prevAlertsRef.current.map(a => a.key));
+    const newOnes = nonSnoozed.filter(a => !prevKeys.has(a.key));
+    if (newOnes.length > 0) {
+      if ("Notification" in window && Notification.permission === "default")
+        Notification.requestPermission();
+      newOnes.forEach(a => sendAlertNotif(a));
+    }
+    prevAlertsRef.current = nonSnoozed;
+    setActiveAlerts(nonSnoozed);
+  }, [prices, athMap, cryptoAth, cryptoPrices, alertSnooze]);
 
   const withData = Object.keys(prices).length;
   const ft = d => d.toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
@@ -1008,9 +1349,11 @@ function App() {
 
   const mainTabs = [
     {k:"stock",  l:"📈 Cổ phiếu"},
+    {k:"fund",   l:"📊 Quỹ"},
     {k:"crypto", l:"🪙 Crypto"},
     {k:"dca",    l:"🧮 DCA"},
     {k:"ai",     l:"🤖 AI"},
+    {k:"alert",  l:"🔔 Đầu tư"},
   ];
 
   return (
@@ -1026,7 +1369,20 @@ function App() {
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap"}}>
           {mainTabs.map(({k,l}) => (
-            <button key={k} onClick={()=>setMainTab(k)} style={btnS(mainTab===k)}>{l}</button>
+            <button key={k} onClick={()=>setMainTab(k)}
+              style={{...btnS(mainTab===k), position:"relative"}}>
+              {l}
+              {k==="alert" && activeAlerts.length > 0 && (
+                <span style={{
+                  position:"absolute", top:-4, right:-4,
+                  background:"#ef4444", color:"#fff", borderRadius:"50%",
+                  width:16, height:16, fontSize:9, fontWeight:700,
+                  display:"flex", alignItems:"center", justifyContent:"center"
+                }}>
+                  {activeAlerts.length > 99 ? "99+" : activeAlerts.length}
+                </span>
+              )}
+            </button>
           ))}
         </div>
       </div>
@@ -1066,19 +1422,25 @@ function App() {
               <button onClick={()=>setStockSubTab("watchlist")} style={tabS(stockSubTab==="watchlist","#38bdf8")}>📋 Watchlist AzFin</button>
               <button onClick={()=>setStockSubTab("portfolio")} style={tabS(stockSubTab==="portfolio","#4ade80")}>💼 Danh mục của tôi</button>
             </div>
-            {stockSubTab==="watchlist" && <StockWatchlist prices={prices} priceSource={priceSource}/>}
+            {stockSubTab==="watchlist" && <StockWatchlist prices={prices} priceSource={priceSource} athMap={athMap} athLoading={athLoading}/>}
             {stockSubTab==="portfolio" && <StockPortfolio prices={prices}/>}
           </div>
         )}
 
+        {/* ── FUND TAB ── */}
+        {mainTab==="fund" && <FundSection prices={prices} athMap={athMap} athLoading={athLoading}/>}
+
         {/* ── CRYPTO TAB ── */}
-        {mainTab==="crypto" && <CryptoSection usdvnd={usdvnd}/>}
+        {mainTab==="crypto" && <CryptoSection usdvnd={usdvnd} cryptoPrices={cryptoPrices} setCryptoPrices={setCryptoPrices} cryptoAth={cryptoAth} setCryptoAth={setCryptoAth}/>}
 
         {/* ── DCA TAB ── */}
         {mainTab==="dca" && <DcaCalculator/>}
 
         {/* ── AI TAB ── */}
         {mainTab==="ai" && <AiSection prices={prices} priceSource={priceSource} now={now}/>}
+
+        {/* ── ALERT TAB ── */}
+        {mainTab==="alert" && <AlertTab activeAlerts={activeAlerts} alertSnooze={alertSnooze} setAlertSnooze={setAlertSnooze}/>}
       </div>
     </div>
   );
