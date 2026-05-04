@@ -1135,7 +1135,7 @@ function computeAlerts(prices, athMap, cryptoAth, cryptoPrices) {
 
 function sendAlertNotif(alert) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const labels = { BUY_NOW:"⚡ Mua Ngay!", APPROACHING:"👀 Sắp tới ngưỡng", GRID_FUTURE:"🤖 Grid Future" };
+  const labels = { BUY_NOW:"⚡ Mua Ngay!", APPROACHING:"👀 Sắp tới ngưỡng", GRID_FUTURE:"🤖 Tạo Ngay Grid Long Future" };
   const priceStr = alert.type === "crypto"
     ? "$" + alert.currentPrice.toLocaleString()
     : (alert.currentPrice/1000).toFixed(1) + "k";
@@ -1161,7 +1161,7 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze }) {
   const LEVEL_STYLE = {
     BUY_NOW:     { bg:"#ef4444", label:"⚡ Mua Ngay!" },
     APPROACHING: { bg:"#f59e0b", label:"👀 Sắp tới ngưỡng" },
-    GRID_FUTURE: { bg:"#3b82f6", label:"🤖 Grid Future" },
+    GRID_FUTURE: { bg:"#3b82f6", label:"🤖 Tạo Ngay Grid Long Future" },
   };
 
   return (
@@ -1202,7 +1202,7 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze }) {
             {a.level === "GRID_FUTURE" && (
               <div style={{fontSize:12,color:"#93c5fd",marginBottom:6,background:"#1e40af22",
                 borderRadius:6,padding:"6px 10px",marginTop:4}}>
-                🤖 Grid Future &nbsp;|&nbsp;
+                🤖 Tạo Ngay Grid Long Future &nbsp;|&nbsp;
                 Lưới trên: <b>${a.gridTop.toLocaleString("en-US",{maximumFractionDigits:0})}</b>
                 &nbsp;→&nbsp;
                 Lưới dưới: <b>${a.gridBottom.toLocaleString("en-US",{maximumFractionDigits:0})}</b>
@@ -1252,7 +1252,7 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze }) {
         fontSize:11,color:"#64748b",borderTop:"1px solid #334155"}}>
         ℹ️ Drawdown tính từ ATH. Cổ phiếu: ≤-58% mua ngay / -55% đến -57% sắp đến ngưỡng.
         ETF: ≤-30% mua ngay / -25% đến -29% cảnh báo.
-        Crypto: BTC ≤-40% / ETH,BNB ≤-50% → Grid Future.
+        Crypto: BTC ≤-40% / ETH,BNB ≤-50% → Tạo Ngay Grid Long Future.
       </div>
     </div>
   );
