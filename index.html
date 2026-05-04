@@ -1321,8 +1321,23 @@ function App() {
     if (Object.keys(map).length) { setPrices(map); setSource(source); setUpdated(new Date()); updateATH(map); }
   }, [updateATH]);
 
+  const loadCrypto = useCallback(async () => {
+    const { map } = await fetchCryptoPrices();
+    if (!Object.keys(map).length) return;
+    setCryptoPrices(map);
+    setCryptoAth(prev => {
+      const updated = {...prev};
+      for (const [coin, data] of Object.entries(map)) {
+        if (data.ath) { updated[coin] = data.ath; }
+        else if (!updated[coin] || data.price > updated[coin]) { updated[coin] = data.price; }
+      }
+      return updated;
+    });
+  }, []);
+
   useEffect(() => { load(); const t=setInterval(load,60000); return ()=>clearInterval(t); },[load]);
   useEffect(() => { loadATH(); }, []);
+  useEffect(() => { loadCrypto(); const t=setInterval(loadCrypto,60000); return ()=>clearInterval(t); },[loadCrypto]);
 
   useEffect(() => {
     if (!Object.keys(prices).length && !Object.keys(cryptoPrices).length) return;
