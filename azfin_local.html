@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AzFin Dashboard – Tích sản 05/2026</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0 }
+    body { background: #0a0f1e; font-family: 'Segoe UI', sans-serif; color: #e2e8f0 }
+    ::-webkit-scrollbar { width: 6px; height: 6px }
+    ::-webkit-scrollbar-track { background: #0f172a }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px }
+    textarea, input, select { font-family: 'Segoe UI', sans-serif }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 200 }
+    .modal-box { background: #1e293b; border-radius: 16px; padding: 24px; width: 380px; max-width: 95vw; border: 1px solid #334155 }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+// ── AZFIN reference data ────────────────────────────────────────────────────
+const AZFIN = {
+  tanCong: [
+    { ma: "ACB", ngungTS: 34000, baoVe: 35500, coTuc: 700, tyLe: 2.1 },
+    { ma: "VIB", ngungTS: 23800, baoVe: 25500, coTuc: 900, tyLe: 3.8 },
+    { ma: "NLG", ngungTS: 35000, baoVe: 43000, coTuc: 500, tyLe: 1.4 },
+    { ma: "OCB", ngungTS: 15900, baoVe: 17000, coTuc: 0, tyLe: 0.0 },
+    { ma: "VPB", ngungTS: 36900, baoVe: 39900, coTuc: 500, tyLe: 1.4 },
+    { ma: "ACV", ngungTS: 63800, baoVe: 66800, coTuc: 0, tyLe: 0.0 },
+    { ma: "TPB", ngungTS: 22100, baoVe: 23900, coTuc: 500, tyLe: 2.3 },
+    { ma: "VND", ngungTS: 23000, baoVe: 27000, coTuc: 500, tyLe: 2.2 },
+    { ma: "MSB", ngungTS: 14500, baoVe: 15000, coTuc: 0, tyLe: 0.0 },
+    { ma: "HPG", ngungTS: 34000, baoVe: 36000, coTuc: 500, tyLe: 1.5 },
+    { ma: "TCB", ngungTS: 40000, baoVe: 42800, coTuc: 700, tyLe: 1.8 },
+    { ma: "MSN", ngungTS: 88000, baoVe: 105000, coTuc: 0, tyLe: 0.0 },
+    { ma: "MBB", ngungTS: 33000, baoVe: 34800, coTuc: 1000, tyLe: 3.0 },
+    { ma: "VCB", ngungTS: 71000, baoVe: 73900, coTuc: 500, tyLe: 0.7 },
+    { ma: "SSI", ngungTS: 35000, baoVe: 40000, coTuc: 1000, tyLe: 2.9 },
+    { ma: "VHM", ngungTS: 59000, baoVe: 65000, coTuc: 6000, tyLe: 10.2 },
+    { ma: "VRE", ngungTS: 28500, baoVe: 30000, coTuc: 1000, tyLe: 3.5 },
+    { ma: "STB", ngungTS: 46000, baoVe: 49000, coTuc: 0, tyLe: 0.0 },
+    { ma: "TCX", ngungTS: 53000, baoVe: 58000, coTuc: 500, tyLe: 0.9 },
+    { ma: "HDB", ngungTS: 28500, baoVe: 31000, coTuc: 0, tyLe: 0.0 },
+    { ma: "LHG", ngungTS: 30000, baoVe: 32000, coTuc: 2100, tyLe: 7.0 },
+    { ma: "VHC", ngungTS: 64000, baoVe: 68000, coTuc: 3000, tyLe: 4.7 },
+    { ma: "HCM", ngungTS: 26000, baoVe: 30000, coTuc: 700, tyLe: 2.7 },
+    { ma: "VCI", ngungTS: 28100, baoVe: 32600, coTuc: 800, tyLe: 2.7 },
+  ],
+  canBang: [
+    { ma: "HAX", ngungTS: 14500, baoVe: 16000, coTuc: 1000, tyLe: 6.9 },
+    { ma: "VCS", ngungTS: 55000, baoVe: 59000, coTuc: 3800, tyLe: 6.9 },
+    { ma: "DHG", ngungTS: 130000, baoVe: 136000, coTuc: 10000, tyLe: 7.7 },
+    { ma: "FPT", ngungTS: 100000, baoVe: 110000, coTuc: 2000, tyLe: 2.0 },
+    { ma: "DHC", ngungTS: 42800, baoVe: 45000, coTuc: 2000, tyLe: 4.7 },
+    { ma: "HDG", ngungTS: 33000, baoVe: 35500, coTuc: 1000, tyLe: 3.0 },
+    { ma: "REE", ngungTS: 69000, baoVe: 73000, coTuc: 1000, tyLe: 1.4 },
+    { ma: "MWG", ngungTS: 91000, baoVe: 100000, coTuc: 2000, tyLe: 2.2 },
+    { ma: "PTB", ngungTS: 56700, baoVe: 60800, coTuc: 500, tyLe: 0.9 },
+    { ma: "QNS", ngungTS: 54000, baoVe: 58000, coTuc: 4000, tyLe: 7.4 },
+    { ma: "PHR", ngungTS: 63000, baoVe: 66000, coTuc: 3000, tyLe: 4.8 },
+    { ma: "BWE", ngungTS: 46500, baoVe: 50900, coTuc: 1300, tyLe: 2.8 },
+    { ma: "DPR", ngungTS: 39600, baoVe: 43200, coTuc: 2000, tyLe: 5.1 },
+    { ma: "PNJ", ngungTS: 80000, baoVe: 85000, coTuc: 1500, tyLe: 1.9 },
+    { ma: "VSC", ngungTS: 23000, baoVe: 25000, coTuc: 500, tyLe: 2.2 },
+    { ma: "IMP", ngungTS: 52000, baoVe: 58000, coTuc: 500, tyLe: 1.0 },
+    { ma: "POW", ngungTS: 13800, baoVe: 15500, coTuc: 0, tyLe: 0.0 },
+    { ma: "TDM", ngungTS: 46000, baoVe: 49000, coTuc: 1300, tyLe: 2.8 },
+    { ma: "PVS", ngungTS: 35000, baoVe: 38000, coTuc: 1000, tyLe: 2.9 },
+    { ma: "DGC", ngungTS: 95000, baoVe: 100000, coTuc: 10000, tyLe: 0.0 },
+  ],
+  phongThu: [
+    { ma: "HND", ngungTS: 13300, baoVe: 13700, coTuc: 800, tyLe: 6.0 },
+    { ma: "SIP", ngungTS: 73000, baoVe: 76000, coTuc: 5000, tyLe: 6.8 },
+    { ma: "VNM", ngungTS: 73000, baoVe: 76000, coTuc: 4400, tyLe: 6.0 },
+    { ma: "VEA", ngungTS: 38000, baoVe: 40000, coTuc: 5000, tyLe: 13.2 },
+    { ma: "QTP", ngungTS: 13500, baoVe: 14000, coTuc: 1000, tyLe: 7.4 },
+    { ma: "IDC", ngungTS: 43000, baoVe: 46000, coTuc: 3000, tyLe: 7.0 },
+    { ma: "NT2", ngungTS: 25000, baoVe: 27000, coTuc: 2000, tyLe: 8.0 },
+    { ma: "BMP", ngungTS: 129000, baoVe: 136000, coTuc: 14900, tyLe: 11.5 },
+    { ma: "GAS", ngungTS: 80000, baoVe: 86900, coTuc: 2000, tyLe: 2.5 },
+    { ma: "PLX", ngungTS: 40000, baoVe: 44000, coTuc: 1200, tyLe: 3.0 },
+    { ma: "PVT", ngungTS: 22500, baoVe: 25000, coTuc: 500, tyLe: 2.2 },
+    { ma: "DCM", ngungTS: 36000, baoVe: 38000, coTuc: 1000, tyLe: 2.8 },
+    { ma: "DPM", ngungTS: 24600, baoVe: 25700, coTuc: 1200, tyLe: 4.9 },
+  ]
+};
+
+const ETF_LIST = [
+  { ma: "E1VFVN30", ten: "VFM VN30 ETF" },
+  { ma: "FUEVFVND", ten: "VFMVF1 ETF" },
+  { ma: "FUEVN100", ten: "VN100 ETF" },
+  { ma: "FUESSVFL", ten: "SSI SCA ETF" },
+  { ma: "FUEDCMID", ten: "DCVFM Diamond ETF" },
+];
+const ALL_SYMBOLS = [...AZFIN.tanCong, ...AZFIN.canBang, ...AZFIN.phongThu, ...ETF_LIST].map(s => s.ma);
+const GROUP_META = {
+  tanCong:  { label: "Tấn công",  icon: "🗡", color: "#3b82f6" },
+  canBang:  { label: "Cân bằng",  icon: "⚖", color: "#f59e0b" },
+  phongThu: { label: "Phòng thủ", icon: "🛡", color: "#22c55e" },
+};
+
+const COINS_DEF = [
+  { id: "BTC", cgId: "bitcoin",      binSym: "BTCUSDT", color: "#f59e0b", isGrid: true,  icon: "₿" },
+  { id: "ETH", cgId: "ethereum",     binSym: "ETHUSDT", color: "#6366f1", isGrid: true,  icon: "Ξ" },
+  { id: "BNB", cgId: "binancecoin",  binSym: "BNBUSDT", color: "#fbbf24", isGrid: true,  icon: "⬡" },
+  { id: "OKB", cgId: "okb",          binSym: "OKBUSDT", color: "#38bdf8", isGrid: false, icon: "◎" },
+  { id: "BGB", cgId: "bitget-token", binSym: "BGBUSDT", color: "#a78bfa", isGrid: false, icon: "◈" },
+];
+
+// ── LocalStorage hook ────────────────────────────────────────────────────────
+function useLS(key, def) {
+  const [val, setVal] = useState(() => {
+    try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : def; } catch { return def; }
+  });
+  const save = useCallback(updater => {
+    setVal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, [key]);
+  return [val, save];
+}
+
+// ── Stock price fetchers (preserved) ────────────────────────────────────────
+async function tryLocalProxy() {
+  const r = await fetch("/api/prices");
+  if (!r.ok) throw new Error("proxy " + r.status);
+  const map = await r.json();
+  if (Object.keys(map).length < 5) throw new Error("proxy trả ít mã");
+  return map;
+}
+async function tryMSSI(symbols) {
+  const url = `https://fc-data.ssi.com.vn/api/v2/Market/Symbols?lookupRequest.market=HOSE,HNX,UPCOM&lookupRequest.pageIndex=1&lookupRequest.pageSize=1000`;
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error(r.status);
+  const d = await r.json();
+  const map = {};
+  (d?.data?.symbolList || d?.data || []).forEach(item => {
+    const sym = item.Symbol || item.symbol;
+    if (!sym || !symbols.includes(sym)) return;
+    const lp = item.LastPrice || item.Close || item.MatchPrice;
+    const rf = item.RefPrice || item.ReferencePrice || lp;
+    if (lp) {
+      const lpN = lp > 1000 ? lp : lp * 1000;
+      const rfN = rf > 1000 ? rf : rf * 1000;
+      map[sym] = { lastPrice: lpN, changePct: rfN ? +((lpN - rfN) / rfN * 100).toFixed(2) : 0 };
+    }
+  });
+  return map;
+}
+async function trySSI(symbols) {
+  const url = `https://iboard-query.ssi.com.vn/v2/stock/new-factors?symbolList=${symbols.join(",")}`;
+  const r = await fetch(url, { headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" } });
+  if (!r.ok) throw new Error("ssi " + r.status);
+  const d = await r.json();
+  const arr = d?.data || d?.items || (Array.isArray(d) ? d : []);
+  const map = {};
+  arr.forEach(item => {
+    const sym = item.ss || item.symbol || item.ticker;
+    if (!sym) return;
+    const cp = item.cp || item.closePrice || item.matchPrice;
+    const rf = item.rf || item.refPrice || cp;
+    if (cp) {
+      const lpN = cp > 10000 ? cp : cp * 1000;
+      const rfN = rf > 10000 ? rf : rf * 1000;
+      map[sym] = { lastPrice: lpN, changePct: rfN ? +((lpN - rfN) / rfN * 100).toFixed(2) : 0 };
+    }
+  });
+  return map;
+}
+async function tryDNSE(symbols) {
+  const url = `https://api.dnse.com.vn/market-data/v2/quotes?symbols=${symbols.join(",")}`;
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error("dnse " + r.status);
+  const d = await r.json();
+  const arr = Array.isArray(d) ? d : (d?.data || d?.quotes || []);
+  const map = {};
+  arr.forEach(item => {
+    const sym = item.symbol || item.ticker;
+    if (!sym) return;
+    const lp = item.lastPrice || item.matchPrice || item.last;
+    if (lp) {
+      const lpN = lp > 10000 ? lp : lp * 1000;
+      map[sym] = { lastPrice: lpN, changePct: item.changePercent || item.changePct || 0 };
+    }
+  });
+  return map;
+}
+async function tryVNDirect(symbols) {
+  const url = `https://finfo-api.vndirect.com.vn/v4/stock_prices?code=${symbols.join(",")}&sort=date&size=${symbols.length * 2}&page=1`;
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error("vndirect " + r.status);
+  const d = await r.json();
+  const map = {};
+  (d?.data || []).forEach(item => {
+    const sym = item.code;
+    if (!sym || map[sym]) return;
+    const lp = item.close || item.match;
+    const rf = item.reference || item.refPrice || lp;
+    if (lp) {
+      const lpN = lp > 1000 ? lp : lp * 1000;
+      const rfN = rf > 1000 ? rf : rf * 1000;
+      map[sym] = { lastPrice: lpN, changePct: rfN ? +((lpN - rfN) / rfN * 100).toFixed(2) : 0 };
+    }
+  });
+  return map;
+}
+// Fetch ATH from VNDirect historical data (sort by close price descending)
+async function fetchHistoricalATH() {
+  const r = await fetch("/api/ath");
+  if (!r.ok) return {};
+  return await r.json();
+}
+
+async function fetchPrices(symbols, addLog) {
+  const sources = [
+    { name: "Local Proxy",    fn: () => tryLocalProxy() },
+    { name: "SSI FastConnect",fn: () => tryMSSI(symbols) },
+    { name: "SSI iBoard",     fn: () => trySSI(symbols) },
+    { name: "DNSE",           fn: () => tryDNSE(symbols) },
+    { name: "VNDirect",       fn: () => tryVNDirect(symbols) },
+  ];
+  for (const src of sources) {
+    try {
+      addLog(`⏳ Đang thử ${src.name}...`);
+      const map = await src.fn();
+      const n = Object.keys(map).length;
+      if (n >= 5) { addLog(`✅ ${src.name} OK — ${n} mã`); return { map, source: src.name }; }
+      addLog(`⚠️ ${src.name}: chỉ ${n} mã, thử tiếp...`);
+    } catch (e) { addLog(`❌ ${src.name}: ${e.message}`); }
+  }
+  addLog("🚫 Tất cả nguồn thất bại.");
+  return { map: {}, source: null };
+}
+
+// ── Crypto price fetcher ─────────────────────────────────────────────────────
+async function fetchCryptoPrices() {
+  try {
+    const syms = COINS_DEF.map(c => c.binSym);
+    const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(syms))}`;
+    const r = await fetch(url);
+    if (r.ok) {
+      const data = await r.json();
+      const map = {};
+      data.forEach(item => {
+        const coin = item.symbol.replace("USDT","");
+        map[coin] = { price: parseFloat(item.lastPrice), change24h: parseFloat(item.priceChangePercent) };
+      });
+      if (Object.keys(map).length >= 3) return { map, source: "Binance" };
+    }
+  } catch {}
+  try {
+    const ids = COINS_DEF.map(c => c.cgId).join(",");
+    const r = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids}&order=market_cap_desc&sparkline=false`);
+    if (r.ok) {
+      const data = await r.json();
+      const map = {};
+      data.forEach(item => {
+        const coinDef = COINS_DEF.find(c => c.cgId === item.id);
+        if (coinDef) map[coinDef.id] = { price: item.current_price, change24h: item.price_change_percentage_24h, ath: item.ath };
+      });
+      if (Object.keys(map).length >= 3) return { map, source: "CoinGecko" };
+    }
+  } catch {}
+  return { map: {}, source: null };
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const fNum = n => (n || 0).toLocaleString("vi-VN");
+const fUSD = n => "$" + (n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pctColor = p => p >= 0 ? "#4ade80" : "#f87171";
+const pctFromTS = (giaHT, ngungTS) =>
+  giaHT && ngungTS ? Math.round(((ngungTS - giaHT) / giaHT) * 100) : null;
+
+// ── SVG Donut Chart ───────────────────────────────────────────────────────────
+function DonutChart({ segments, size = 180, centerText }) {
+  const filtered = (segments || []).filter(s => s.value > 0);
+  const total = filtered.reduce((a, s) => a + s.value, 0);
+  if (!total) return <div style={{color:"#475569",fontSize:11,textAlign:"center",padding:16}}>Chưa có dữ liệu</div>;
+  const cx = size/2, cy = size/2, R = size*0.4, ri = size*0.24;
+  let angle = -Math.PI/2;
+  const paths = filtered.map(seg => {
+    const a = (seg.value/total)*2*Math.PI;
+    const end = angle + a;
+    const large = a > Math.PI ? 1 : 0;
+    const x1=cx+R*Math.cos(angle), y1=cy+R*Math.sin(angle);
+    const x2=cx+R*Math.cos(end),   y2=cy+R*Math.sin(end);
+    const xi1=cx+ri*Math.cos(angle), yi1=cy+ri*Math.sin(angle);
+    const xi2=cx+ri*Math.cos(end),   yi2=cy+ri*Math.sin(end);
+    const d=`M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2} L${xi2},${yi2} A${ri},${ri} 0 ${large},0 ${xi1},${yi1} Z`;
+    angle = end;
+    return { d, color: seg.color, label: seg.label, pct: (seg.value/total*100).toFixed(1) };
+  });
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{display:"block",margin:"0 auto"}}>
+      {paths.map((p,i) => (
+        <path key={i} d={p.d} fill={p.color} stroke="#0a0f1e" strokeWidth={1.5} opacity={0.9}>
+          <title>{p.label}: {p.pct}%</title>
+        </path>
+      ))}
+      {centerText && <>
+        <text x={cx} y={cy-5} textAnchor="middle" fill="#94a3b8" fontSize={9}>{centerText[0]}</text>
+        <text x={cx} y={cy+10} textAnchor="middle" fill="#e2e8f0" fontSize={11} fontWeight="bold">{centerText[1]}</text>
+      </>}
+    </svg>
+  );
+}
+
+// ── Chart Legend ─────────────────────────────────────────────────────────────
+function ChartLegend({ segments }) {
+  const total = segments.reduce((a,s) => a+s.value, 0);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:4,justifyContent:"center"}}>
+      {segments.filter(s=>s.value>0).map((s,i) => (
+        <div key={i} style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}>
+          <div style={{width:10,height:10,borderRadius:2,background:s.color,flexShrink:0}}/>
+          <span style={{color:"#94a3b8",flex:1}}>{s.label}</span>
+          <span style={{color:"#e2e8f0",fontWeight:600}}>{total ? (s.value/total*100).toFixed(1) : 0}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Horizontal P&L Bar ────────────────────────────────────────────────────────
+function PnLBarRow({ label, pnl, maxAbs }) {
+  if (!maxAbs) return null;
+  const pct = Math.min(Math.abs(pnl)/maxAbs*100, 100);
+  const c = pnl >= 0 ? "#4ade80" : "#f87171";
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+      <div style={{width:50,fontSize:11,color:"#94a3b8",textAlign:"right",flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</div>
+      <div style={{flex:1,background:"#0f172a",borderRadius:4,height:14,position:"relative"}}>
+        <div style={{
+          position:"absolute",
+          left: pnl >= 0 ? "50%" : `calc(50% - ${pct/2}%)`,
+          width: `${pct/2}%`,
+          height:"100%",
+          background: c,
+          borderRadius: pnl >= 0 ? "0 4px 4px 0" : "4px 0 0 4px"
+        }}/>
+        <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:"#334155"}}/>
+      </div>
+      <div style={{width:72,fontSize:11,color:c,fontWeight:700,textAlign:"right",flexShrink:0}}>
+        {pnl>=0?"+":""}{fNum(Math.round(pnl))}
+      </div>
+    </div>
+  );
+}
+
+// ── Button styles ─────────────────────────────────────────────────────────────
+const btnS = (active, color="#3b82f6") => ({
+  padding:"7px 15px", borderRadius:20, border:"none", cursor:"pointer",
+  fontSize:12, fontWeight:600, whiteSpace:"nowrap",
+  background: active ? `linear-gradient(135deg,${color},#06b6d4)` : "#1e293b",
+  color: active ? "#fff" : "#94a3b8"
+});
+const tabS = (active, color) => ({
+  padding:"6px 16px", borderRadius:20, border:`1px solid ${active?color:"#334155"}`,
+  cursor:"pointer", fontSize:12, fontWeight:600,
+  background: active ? color+"33" : "transparent", color: active ? color : "#64748b"
+});
+const inputS = { width:"100%", padding:"9px 12px", borderRadius:8, border:"1px solid #334155", background:"#0f172a", color:"#e2e8f0", fontSize:13, outline:"none" };
+const labelS = { fontSize:11, color:"#94a3b8", display:"block", marginBottom:4 };
+
+// ── BarCell (watchlist) ───────────────────────────────────────────────────────
+function BarCell({ val }) {
+  if (val === null) return <span style={{color:"#475569"}}>—</span>;
+  const w = Math.min(Math.abs(val), 80);
+  const c = val <= 0 ? "#f87171" : val <= 15 ? "#fbbf24" : "#4ade80";
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:6,minWidth:120}}>
+      <div style={{flex:1,background:"#1e293b",borderRadius:4,height:14,overflow:"hidden"}}>
+        <div style={{width:`${w}%`,height:"100%",background:c,borderRadius:4}}/>
+      </div>
+      <span style={{color:c,fontWeight:700,fontSize:12,minWidth:38,textAlign:"right"}}>{val}%</span>
+    </div>
+  );
+}
+
+// ── ATH Drop Cell ─────────────────────────────────────────────────────────────
+function ATHDropCell({ ath, giaHT, isCrypto }) {
+  if (!ath || !giaHT) return <td style={{padding:"8px 12px",color:"#475569"}}>—</td>;
+  const drop = Math.round(((ath - giaHT) / ath) * 100);
+  const color = drop <= 10 ? "#4ade80" : drop <= 30 ? "#fbbf24" : "#f87171";
+  const athLabel = isCrypto ? fUSD(ath) : (ath/1000).toFixed(1)+"k";
+  return (
+    <td style={{padding:"8px 12px"}}>
+      <div style={{color, fontWeight:700, fontSize:12}}>-{drop}%</div>
+      <div style={{fontSize:10, color:"#475569"}}>{athLabel}</div>
+    </td>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SECTION: Stock Watchlist (AzFin) ─────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function StockWatchlist({ prices, priceSource, athMap, athLoading }) {
+  const [tab, setTab] = useState("all");
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState("pct");
+  const [sortDir, setSortDir] = useState(1);
+
+  const allStocks = useMemo(() => [
+    ...AZFIN.tanCong.map(s => ({ ...s, nhom:"tanCong" })),
+    ...AZFIN.canBang.map(s => ({ ...s, nhom:"canBang" })),
+    ...AZFIN.phongThu.map(s => ({ ...s, nhom:"phongThu" })),
+  ].map(s => {
+    const p = prices[s.ma];
+    const giaHT = p?.lastPrice || null;
+    const ath = athMap[s.ma] || null;
+    const athDrop = (ath && giaHT) ? Math.round(((ath - giaHT) / ath) * 100) : null;
+    return { ...s, giaHT, changePct: p?.changePct ?? null, pct: pctFromTS(giaHT, s.ngungTS), ath, athDrop };
+  }), [prices, athMap]);
+
+  const filtered = allStocks
+    .filter(s => (tab==="all"||s.nhom===tab) && s.ma.toLowerCase().includes(search.toLowerCase()))
+    .sort((a,b) => {
+      let av=a[sortKey], bv=b[sortKey];
+      if (av===null) av = sortDir>0 ? Infinity : -Infinity;
+      if (bv===null) bv = sortDir>0 ? Infinity : -Infinity;
+      return (av-bv)*sortDir;
+    });
+
+  const toggle = k => { if(sortKey===k) setSortDir(d=>-d); else { setSortKey(k); setSortDir(1); } };
+  const SI = ({k}) => <span style={{fontSize:9,color:"#475569",marginLeft:2}}>{sortKey===k?(sortDir>0?"▲":"▼"):"⇅"}</span>;
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+        {[["all","🔹 Tất cả","#38bdf8"],["tanCong","🗡 Tấn công","#3b82f6"],["canBang","⚖ Cân bằng","#f59e0b"],["phongThu","🛡 Phòng thủ","#22c55e"]].map(([k,l,c]) => (
+          <button key={k} onClick={()=>setTab(k)} style={tabS(tab===k,c)}>{l}</button>
+        ))}
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Tìm mã..."
+          style={{marginLeft:"auto",padding:"6px 14px",borderRadius:20,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:12,outline:"none",width:140}}/>
+      </div>
+      {(tab==="all" ? ["tanCong","canBang","phongThu"] : [tab]).map(nhom => {
+        const rows = filtered.filter(s => s.nhom===nhom);
+        if (!rows.length) return null;
+        const meta = GROUP_META[nhom];
+        const rp = rows.filter(s=>s.pct!==null);
+        const avgPct = rp.length ? Math.round(rp.reduce((a,s)=>a+s.pct,0)/rp.length) : null;
+        const rc = rows.filter(s=>s.changePct!==null);
+        const avgTD = rc.length ? (rc.reduce((a,s)=>a+s.changePct,0)/rc.length).toFixed(2) : null;
+        return (
+          <div key={nhom} style={{marginBottom:20,borderRadius:12,overflow:"hidden",border:`1px solid ${meta.color}44`}}>
+            <div style={{background:`linear-gradient(90deg,${meta.color}22,transparent)`,padding:"10px 16px",borderBottom:`1px solid ${meta.color}33`,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontWeight:700,fontSize:14,color:meta.color}}>{meta.icon} Danh mục AzFin — {meta.label}</span>
+              <span style={{marginLeft:"auto",fontSize:11,color:"#475569"}}>{rows.length} mã</span>
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead>
+                  <tr style={{background:"#111827"}}>
+                    {[
+                      {k:"ma",l:"Cổ phiếu",s:0},{k:"ngungTS",l:"Ngưỡng TS",s:1},{k:"baoVe",l:"Bảo vệ TQ",s:1},
+                      {k:"giaHT",l:"Giá HT ⚡",s:1,hi:1},{k:"ath",l:athLoading?"ATH ⏳":"ATH",s:1},{k:"athDrop",l:"Drawdown",s:1},
+                      {k:"pct",l:"% cách ngưỡng",s:1},{k:"changePct",l:"% thay đổi",s:1},
+                    ].map(col => (
+                      <th key={col.k} onClick={col.s?()=>toggle(col.k):undefined}
+                        style={{padding:"9px 12px",textAlign:"left",color:col.hi?"#38bdf8":"#64748b",fontWeight:600,whiteSpace:"nowrap",borderBottom:"1px solid #1e293b",cursor:col.s?"pointer":"default",userSelect:"none"}}>
+                        {col.l}{col.s?<SI k={col.k}/>:null}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((s,i) => {
+                    const tdc = s.changePct===null ? "#475569" : s.changePct>=0 ? "#4ade80" : "#f87171";
+                    return (
+                      <tr key={s.ma} style={{background:i%2===0?"#0a0f1e":"#0d1526",borderLeft:`3px solid ${meta.color}55`}}>
+                        <td style={{padding:"8px 12px",fontWeight:700,fontSize:13,color:"#fff"}}>{s.ma}</td>
+                        <td style={{padding:"8px 12px",color:"#94a3b8"}}>{(s.ngungTS/1000).toFixed(1)}</td>
+                        <td style={{padding:"8px 12px",color:"#94a3b8"}}>{(s.baoVe/1000).toFixed(1)}</td>
+                        <td style={{padding:"8px 12px"}}>
+                          {s.giaHT ? <span style={{color:"#38bdf8",fontWeight:700,fontSize:13}}>{(s.giaHT/1000).toFixed(1)}</span>
+                                   : <span style={{color:"#334155",fontSize:10}}>—</span>}
+                        </td>
+                        <td style={{padding:"8px 12px",color:"#94a3b8",fontSize:12}}>
+                          {athMap[s.ma] ? (athMap[s.ma]/1000).toFixed(1) : athLoading ? <span style={{color:"#475569",fontSize:10}}>⏳</span> : "—"}
+                        </td>
+                        <ATHDropCell ath={athMap[s.ma]} giaHT={s.giaHT}/>
+                        <td style={{padding:"8px 12px"}}><BarCell val={s.pct}/></td>
+                        <td style={{padding:"8px 12px",color:tdc,fontWeight:700}}>
+                          {s.changePct!==null ? (s.changePct>=0?"+":"")+s.changePct.toFixed(2)+"%" : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr style={{background:"#1e293b",fontWeight:700,borderLeft:`3px solid ${meta.color}`}}>
+                    <td colSpan={4} style={{padding:"8px 12px",color:meta.color}}>Trung bình</td>
+                    <td style={{padding:"8px 12px"}}/>
+                    <td style={{padding:"8px 12px"}}/>
+                    <td style={{padding:"8px 12px"}}>{avgPct!==null && <BarCell val={avgPct}/>}</td>
+                    <td style={{padding:"8px 12px",color:avgTD&&parseFloat(avgTD)>=0?"#4ade80":"#f87171"}}>
+                      {avgTD?(parseFloat(avgTD)>=0?"+":"")+avgTD+"%":"—"}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:4}}>
+        {[["#4ade80","Còn xa ngưỡng (>15%)"],["#fbbf24","Gần ngưỡng (0–15%)"],["#f87171","Đã vượt ngưỡng (<0%)"]].map(([c,l]) => (
+          <div key={l} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#64748b"}}>
+            <div style={{width:10,height:10,borderRadius:2,background:c}}/>{l}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SECTION: My Stock Portfolio ───────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function StockPortfolio({ prices }) {
+  const [holdings, setHoldings] = useLS("azfin_stock_holdings", []);
+  const [showModal, setShowModal] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [form, setForm] = useState({ ma:"", soLuong:"", giaMuaTB:"", ghiChu:"" });
+
+  const openAdd = () => { setEditItem(null); setForm({ma:"",soLuong:"",giaMuaTB:"",ghiChu:""}); setShowModal(true); };
+  const openEdit = item => { setEditItem(item); setForm({ma:item.ma,soLuong:String(item.soLuong),giaMuaTB:String(item.giaMuaTB),ghiChu:item.ghiChu||""}); setShowModal(true); };
+  const del = id => setHoldings(holdings.filter(h => h.id !== id));
+
+  const save = () => {
+    if (!form.ma || !form.soLuong || !form.giaMuaTB) return;
+    const item = { id: editItem?.id || Date.now(), ma: form.ma.toUpperCase(), soLuong: parseFloat(form.soLuong), giaMuaTB: parseFloat(form.giaMuaTB), ghiChu: form.ghiChu };
+    if (editItem) setHoldings(holdings.map(h => h.id===editItem.id ? item : h));
+    else setHoldings([...holdings, item]);
+    setShowModal(false);
+  };
+
+  const rows = holdings.map(h => {
+    const p = prices[h.ma];
+    const giaHT = p?.lastPrice || null;
+    const vonDT = h.soLuong * h.giaMuaTB;
+    const giaTriHT = giaHT ? h.soLuong * giaHT : null;
+    const pnl = giaTriHT !== null ? giaTriHT - vonDT : null;
+    const pnlPct = pnl !== null ? (pnl/vonDT*100).toFixed(2) : null;
+    return { ...h, giaHT, vonDT, giaTriHT, pnl, pnlPct };
+  });
+
+  const totalVon = rows.reduce((a,r) => a+r.vonDT, 0);
+  const totalHT  = rows.reduce((a,r) => a+(r.giaTriHT||r.vonDT), 0);
+  const totalPnl = totalHT - totalVon;
+  const totalPct = totalVon ? (totalPnl/totalVon*100).toFixed(2) : 0;
+
+  const donutSegs = rows.filter(r=>r.vonDT>0).map((r,i) => ({
+    label: r.ma, value: r.vonDT,
+    color: ["#3b82f6","#06b6d4","#8b5cf6","#ec4899","#f59e0b","#22c55e","#f87171","#a78bfa","#38bdf8","#fbbf24"][i%10]
+  }));
+  const maxPnl = Math.max(...rows.map(r=>Math.abs(r.pnl||0)),1);
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:10,flex:1,flexWrap:"wrap"}}>
+          {[
+            {lbl:"Tổng vốn",val:fNum(Math.round(totalVon))+" đ",c:"#94a3b8"},
+            {lbl:"Giá trị HT",val:fNum(Math.round(totalHT))+" đ",c:"#38bdf8"},
+            {lbl:"Lãi/Lỗ",val:(totalPnl>=0?"+":"")+fNum(Math.round(totalPnl))+" đ",c:pctColor(totalPnl)},
+            {lbl:"Tỷ suất",val:(parseFloat(totalPct)>=0?"+":"")+totalPct+"%",c:pctColor(parseFloat(totalPct))},
+          ].map(s => (
+            <div key={s.lbl} style={{background:"#1e293b",borderRadius:10,padding:"8px 14px",borderTop:`2px solid ${s.c}`}}>
+              <div style={{fontSize:13,fontWeight:700,color:s.c}}>{s.val}</div>
+              <div style={{fontSize:10,color:"#475569"}}>{s.lbl}</div>
+            </div>
+          ))}
+        </div>
+        <button onClick={openAdd} style={{padding:"8px 18px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#3b82f6,#06b6d4)",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}}>+ Thêm CP</button>
+      </div>
+
+      {rows.length > 0 && (
+        <div style={{display:"flex",gap:20,marginBottom:20,flexWrap:"wrap"}}>
+          <div style={{background:"#1e293b",borderRadius:12,padding:16,flex:"0 0 auto"}}>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:8,textAlign:"center"}}>Phân bổ vốn</div>
+            <DonutChart segments={donutSegs} size={160} centerText={["Tổng vốn", fNum(Math.round(totalVon/1e6))+"M"]}/>
+            <div style={{marginTop:10}}><ChartLegend segments={donutSegs}/></div>
+          </div>
+          <div style={{background:"#1e293b",borderRadius:12,padding:16,flex:1,minWidth:220}}>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>Lãi/Lỗ theo cổ phiếu (đồng)</div>
+            {rows.map(r => <PnLBarRow key={r.id} label={r.ma} pnl={r.pnl||0} maxAbs={maxPnl}/>)}
+          </div>
+        </div>
+      )}
+
+      {holdings.length === 0 ? (
+        <div style={{textAlign:"center",padding:40,color:"#475569",fontSize:13}}>Chưa có cổ phiếu nào. Nhấn "+ Thêm CP" để bắt đầu.</div>
+      ) : (
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr style={{background:"#111827"}}>
+                {["Mã CP","SL","Giá mua TB","Giá HT","Giá trị HT","Lãi/Lỗ","Tỷ suất","Ghi chú",""].map(h => (
+                  <th key={h} style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontWeight:600,whiteSpace:"nowrap",borderBottom:"1px solid #1e293b"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r,i) => (
+                <tr key={r.id} style={{background:i%2===0?"#0a0f1e":"#0d1526"}}>
+                  <td style={{padding:"8px 12px",fontWeight:700,color:"#fff"}}>{r.ma}</td>
+                  <td style={{padding:"8px 12px",color:"#94a3b8"}}>{fNum(r.soLuong)}</td>
+                  <td style={{padding:"8px 12px",color:"#94a3b8"}}>{(r.giaMuaTB/1000).toFixed(1)}</td>
+                  <td style={{padding:"8px 12px"}}>
+                    {r.giaHT ? <span style={{color:"#38bdf8",fontWeight:700}}>{(r.giaHT/1000).toFixed(1)}</span> : <span style={{color:"#334155"}}>—</span>}
+                  </td>
+                  <td style={{padding:"8px 12px",color:"#e2e8f0"}}>{r.giaTriHT ? fNum(Math.round(r.giaTriHT)) : "—"}</td>
+                  <td style={{padding:"8px 12px",color:pctColor(r.pnl||0),fontWeight:700}}>
+                    {r.pnl!==null?(r.pnl>=0?"+":"")+fNum(Math.round(r.pnl)):"—"}
+                  </td>
+                  <td style={{padding:"8px 12px",color:pctColor(parseFloat(r.pnlPct||0)),fontWeight:700}}>
+                    {r.pnlPct!==null?(parseFloat(r.pnlPct)>=0?"+":"")+r.pnlPct+"%":"—"}
+                  </td>
+                  <td style={{padding:"8px 12px",color:"#64748b",fontSize:11}}>{r.ghiChu}</td>
+                  <td style={{padding:"8px 12px"}}>
+                    <button onClick={()=>openEdit(r)} style={{marginRight:6,padding:"2px 8px",borderRadius:5,border:"none",background:"#1e40af",color:"#93c5fd",cursor:"pointer",fontSize:11}}>Sửa</button>
+                    <button onClick={()=>del(r.id)} style={{padding:"2px 8px",borderRadius:5,border:"none",background:"#7f1d1d",color:"#fca5a5",cursor:"pointer",fontSize:11}}>Xóa</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {showModal && (
+        <div className="modal-overlay" onClick={()=>setShowModal(false)}>
+          <div className="modal-box" onClick={e=>e.stopPropagation()}>
+            <h3 style={{color:"#38bdf8",marginBottom:16,fontSize:15}}>{editItem?"Sửa vị thế":"Thêm cổ phiếu"}</h3>
+            {[{l:"Mã cổ phiếu",k:"ma",p:"VD: ACB"},{l:"Số lượng (cp)",k:"soLuong",p:"VD: 1000"},{l:"Giá mua TB (đ/cp)",k:"giaMuaTB",p:"VD: 35000"},{l:"Ghi chú",k:"ghiChu",p:"Tuỳ chọn"}].map(f => (
+              <div key={f.k} style={{marginBottom:12}}>
+                <label style={labelS}>{f.l}</label>
+                <input style={inputS} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p} type={f.k==="ma"||f.k==="ghiChu"?"text":"number"}/>
+              </div>
+            ))}
+            <div style={{display:"flex",gap:8,marginTop:4}}>
+              <button onClick={save} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#3b82f6,#06b6d4)",color:"#fff",fontWeight:700,cursor:"pointer"}}>Lưu</button>
+              <button onClick={()=>setShowModal(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SECTION: Crypto Portfolio ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCryptoAth }) {
+  const [holdings, setHoldings] = useLS("azfin_crypto_holdings",
+    COINS_DEF.reduce((acc,c) => ({...acc,[c.id]:{soLuong:0,giaMuaTB:0,gridProfit:0}}),{}));
+  const [priceSource, setPriceSource] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [editCoin, setEditCoin] = useState(null);
+  const [form, setForm] = useState({soLuong:"",giaMuaTB:"",gridProfit:""});
+
+  const loadPrices = useCallback(async () => {
+    setLoading(true);
+    const { map, source } = await fetchCryptoPrices();
+    setCryptoPrices(map);
+    setPriceSource(source);
+    setCryptoAth(prev => {
+      const updated = {...prev};
+      for (const [coin, data] of Object.entries(map)) {
+        if (data.ath) { updated[coin] = data.ath; }
+        else if (!updated[coin] || data.price > updated[coin]) { updated[coin] = data.price; }
+      }
+      return updated;
+    });
+    setLoading(false);
+  }, [setCryptoPrices, setCryptoAth]);
+
+  useEffect(() => { loadPrices(); const t=setInterval(loadPrices, 60000); return ()=>clearInterval(t); }, [loadPrices]);
+
+  const openEdit = coin => {
+    setEditCoin(coin.id);
+    const h = holdings[coin.id] || {};
+    setForm({soLuong:String(h.soLuong||0),giaMuaTB:String(h.giaMuaTB||0),gridProfit:String(h.gridProfit||0)});
+  };
+  const saveHolding = () => {
+    setHoldings({...holdings,[editCoin]:{soLuong:parseFloat(form.soLuong)||0,giaMuaTB:parseFloat(form.giaMuaTB)||0,gridProfit:parseFloat(form.gridProfit)||0}});
+    setEditCoin(null);
+  };
+
+  const rows = COINS_DEF.map(c => {
+    const h = holdings[c.id] || {};
+    const price = cryptoPrices[c.id]?.price || 0;
+    const change24h = cryptoPrices[c.id]?.change24h || 0;
+    const vonUSD = h.soLuong * h.giaMuaTB;
+    const htUSD  = h.soLuong * price;
+    const pnlUSD = price > 0 ? htUSD - vonUSD : 0;
+    const pnlPct = vonUSD > 0 && price > 0 ? (pnlUSD/vonUSD*100).toFixed(2) : null;
+    const vonVND = vonUSD * usdvnd;
+    const pnlVND = pnlUSD * usdvnd;
+    const gridVND = (h.gridProfit||0) * usdvnd;
+    return {...c, ...h, price, change24h, vonUSD, htUSD, pnlUSD, pnlPct, vonVND, pnlVND, gridVND, ath: cryptoAth[c.id] || 0};
+  });
+
+  const totalVon = rows.reduce((a,r)=>a+r.vonUSD,0);
+  const totalHT  = rows.reduce((a,r)=>a+(r.price>0?r.htUSD:r.vonUSD),0);
+  const totalPnl = totalHT - totalVon;
+  const totalGrid= rows.reduce((a,r)=>a+(r.gridProfit||0),0);
+
+  const donutSegs = rows.filter(r=>r.vonUSD>0).map(r => ({label:r.id,value:r.vonUSD,color:r.color}));
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:10,flex:1,flexWrap:"wrap"}}>
+          {[
+            {lbl:"Tổng vốn",val:fUSD(totalVon),c:"#94a3b8"},
+            {lbl:"Giá trị HT",val:fUSD(totalHT),c:"#38bdf8"},
+            {lbl:"Lãi/Lỗ DCA",val:(totalPnl>=0?"+":"")+fUSD(totalPnl),c:pctColor(totalPnl)},
+            {lbl:"Grid Profit",val:fUSD(totalGrid),c:"#a78bfa"},
+          ].map(s => (
+            <div key={s.lbl} style={{background:"#1e293b",borderRadius:10,padding:"8px 14px",borderTop:`2px solid ${s.c}`}}>
+              <div style={{fontSize:13,fontWeight:700,color:s.c}}>{s.val}</div>
+              <div style={{fontSize:10,color:"#475569"}}>{s.lbl}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:priceSource?"#4ade80":"#f87171",boxShadow:`0 0 6px ${priceSource?"#4ade80":"#f87171"}`}}/>
+          <span style={{fontSize:11,color:"#64748b"}}>{loading?"Đang tải...":priceSource||"Chưa có giá"}</span>
+          <button onClick={loadPrices} style={{padding:"3px 10px",borderRadius:6,border:"none",background:"#1e293b",color:"#64748b",cursor:"pointer",fontSize:11}}>↺</button>
+        </div>
+      </div>
+
+      {donutSegs.length > 0 && (
+        <div style={{display:"flex",gap:20,marginBottom:20,flexWrap:"wrap"}}>
+          <div style={{background:"#1e293b",borderRadius:12,padding:16,flex:"0 0 auto"}}>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:8,textAlign:"center"}}>Phân bổ danh mục Crypto</div>
+            <DonutChart segments={donutSegs} size={160} centerText={["Tổng vốn",fUSD(totalVon)]}/>
+            <div style={{marginTop:10}}><ChartLegend segments={donutSegs}/></div>
+          </div>
+          <div style={{background:"#1e293b",borderRadius:12,padding:16,flex:1,minWidth:220}}>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>Lãi/Lỗ DCA theo coin (USD)</div>
+            {rows.filter(r=>r.vonUSD>0).map(r => (
+              <PnLBarRow key={r.id} label={r.id} pnl={r.pnlUSD} maxAbs={Math.max(...rows.map(x=>Math.abs(x.pnlUSD)),1)}/>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead>
+            <tr style={{background:"#111827"}}>
+              {["Coin","Số lượng","Giá mua TB","Giá HT","ATH","% từ ATH","24h","Vốn (USD)","Giá trị HT","Lãi/Lỗ","Tỷ suất","Grid Profit",""].map(h => (
+                <th key={h} style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontWeight:600,whiteSpace:"nowrap",borderBottom:"1px solid #1e293b"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r,i) => (
+              <tr key={r.id} style={{background:i%2===0?"#0a0f1e":"#0d1526"}}>
+                <td style={{padding:"8px 12px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <div style={{width:24,height:24,borderRadius:"50%",background:r.color+"33",display:"flex",alignItems:"center",justifyContent:"center",color:r.color,fontWeight:900,fontSize:12}}>{r.icon}</div>
+                    <div>
+                      <div style={{fontWeight:700,color:r.color}}>{r.id}</div>
+                      {r.isGrid && <div style={{fontSize:9,color:"#a78bfa",background:"#4c1d9522",padding:"1px 5px",borderRadius:4,marginTop:2}}>GRID BOT</div>}
+                    </div>
+                  </div>
+                </td>
+                <td style={{padding:"8px 12px",color:"#94a3b8"}}>{r.soLuong||"—"}</td>
+                <td style={{padding:"8px 12px",color:"#94a3b8"}}>{r.giaMuaTB?fUSD(r.giaMuaTB):"—"}</td>
+                <td style={{padding:"8px 12px",color:"#38bdf8",fontWeight:700}}>{r.price?fUSD(r.price):"—"}</td>
+                <td style={{padding:"8px 12px",color:"#94a3b8"}}>{r.ath?fUSD(r.ath):"—"}</td>
+                <ATHDropCell ath={r.ath||null} giaHT={r.price||null} isCrypto={true}/>
+                <td style={{padding:"8px 12px",color:pctColor(r.change24h),fontWeight:700}}>
+                  {r.change24h?(r.change24h>=0?"+":"")+r.change24h.toFixed(2)+"%":"—"}
+                </td>
+                <td style={{padding:"8px 12px",color:"#94a3b8"}}>{r.vonUSD?fUSD(r.vonUSD):"—"}</td>
+                <td style={{padding:"8px 12px",color:"#e2e8f0"}}>{r.price&&r.soLuong?fUSD(r.htUSD):"—"}</td>
+                <td style={{padding:"8px 12px",color:pctColor(r.pnlUSD),fontWeight:700}}>
+                  {r.pnlPct!==null?(r.pnlUSD>=0?"+":"")+fUSD(r.pnlUSD):"—"}
+                </td>
+                <td style={{padding:"8px 12px",color:pctColor(parseFloat(r.pnlPct||0)),fontWeight:700}}>
+                  {r.pnlPct!==null?(parseFloat(r.pnlPct)>=0?"+":"")+r.pnlPct+"%":"—"}
+                </td>
+                <td style={{padding:"8px 12px",color:"#a78bfa",fontWeight:700}}>
+                  {r.gridProfit?fUSD(r.gridProfit):"—"}
+                </td>
+                <td style={{padding:"8px 12px"}}>
+                  <button onClick={()=>openEdit(r)} style={{padding:"2px 8px",borderRadius:5,border:"none",background:"#1e40af",color:"#93c5fd",cursor:"pointer",fontSize:11}}>Sửa</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{marginTop:10,padding:"8px 14px",background:"#1e293b",borderRadius:8,fontSize:11,color:"#64748b"}}>
+        ⚡ Giá crypto từ <b style={{color:"#38bdf8"}}>{priceSource||"..."}</b> · Tự động cập nhật 60s · Grid Profit tính riêng từ Futures
+      </div>
+
+      {editCoin && (
+        <div className="modal-overlay" onClick={()=>setEditCoin(null)}>
+          <div className="modal-box" onClick={e=>e.stopPropagation()}>
+            <h3 style={{color:COINS_DEF.find(c=>c.id===editCoin)?.color||"#38bdf8",marginBottom:16,fontSize:15}}>Cập nhật {editCoin}</h3>
+            {[{l:"Số lượng coin",k:"soLuong",p:"VD: 0.05"},{l:"Giá mua TB (USD)",k:"giaMuaTB",p:"VD: 60000"},{l:"Grid Profit (USD)",k:"gridProfit",p:"VD: 150"}].map(f => (
+              <div key={f.k} style={{marginBottom:12}}>
+                <label style={labelS}>{f.l}</label>
+                <input style={inputS} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p} type="number"/>
+              </div>
+            ))}
+            <div style={{display:"flex",gap:8,marginTop:4}}>
+              <button onClick={saveHolding} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#7c3aed,#3b82f6)",color:"#fff",fontWeight:700,cursor:"pointer"}}>Lưu</button>
+              <button onClick={()=>setEditCoin(null)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SECTION: DCA Calculator ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function DcaCalculator() {
+  const [histories, setHistories] = useLS("azfin_dca_history", {});
+  const [asset, setAsset] = useState("BTC");
+  const [customAsset, setCustomAsset] = useState("");
+  const [form, setForm] = useState({date:new Date().toISOString().split("T")[0], qty:"", price:"", note:""});
+  const [curPrice, setCurPrice] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+
+  const assets = ["BTC","ETH","BNB","OKB","BGB","ACB","VCB","TCB","FPT","Khác"];
+  const activeAsset = asset === "Khác" ? (customAsset || "Khác") : asset;
+
+  const entries = (histories[activeAsset] || []).sort((a,b) => a.date.localeCompare(b.date));
+
+  const totalQty  = entries.reduce((a,e) => a + e.qty, 0);
+  const totalCost = entries.reduce((a,e) => a + e.qty * e.price, 0);
+  const avgPrice  = totalQty > 0 ? totalCost / totalQty : 0;
+  const cur       = parseFloat(curPrice) || 0;
+  const curValue  = totalQty * cur;
+  const pnl       = cur > 0 ? curValue - totalCost : 0;
+  const pnlPct    = totalCost > 0 && cur > 0 ? (pnl/totalCost*100).toFixed(2) : null;
+
+  const addEntry = () => {
+    if (!form.qty || !form.price) return;
+    const entry = { id: Date.now(), date: form.date, qty: parseFloat(form.qty), price: parseFloat(form.price), note: form.note };
+    setHistories({...histories,[activeAsset]:[...(histories[activeAsset]||[]),entry]});
+    setForm({date:new Date().toISOString().split("T")[0], qty:"", price:"", note:""});
+    setShowAdd(false);
+  };
+  const delEntry = id => setHistories({...histories,[activeAsset]:(histories[activeAsset]||[]).filter(e=>e.id!==id)});
+
+  const isCrypto = ["BTC","ETH","BNB","OKB","BGB"].includes(activeAsset);
+  const unit = isCrypto ? "USD" : "đ";
+
+  return (
+    <div style={{maxWidth:860,margin:"0 auto"}}>
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontSize:12,color:"#64748b",marginRight:4}}>Tài sản:</span>
+        {assets.map(a => (
+          <button key={a} onClick={()=>setAsset(a)} style={tabS(asset===a,"#38bdf8")}>{a}</button>
+        ))}
+        {asset==="Khác" && <input value={customAsset} onChange={e=>setCustomAsset(e.target.value)} placeholder="Nhập tên..." style={{...inputS,width:120,display:"inline-block"}}/>}
+      </div>
+
+      {entries.length > 0 && (
+        <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+          {[
+            {lbl:"Tổng số lượng",val:totalQty.toFixed(totalQty<10?6:2),c:"#e2e8f0"},
+            {lbl:"Tổng vốn",val:isCrypto?fUSD(totalCost):fNum(Math.round(totalCost))+" đ",c:"#94a3b8"},
+            {lbl:"Giá TB",val:isCrypto?fUSD(avgPrice):fNum(Math.round(avgPrice))+" đ",c:"#38bdf8"},
+            ...(cur>0?[
+              {lbl:"Giá trị HT",val:isCrypto?fUSD(curValue):fNum(Math.round(curValue))+" đ",c:"#38bdf8"},
+              {lbl:"Lãi/Lỗ",val:(pnl>=0?"+":"")+(isCrypto?fUSD(pnl):fNum(Math.round(pnl))+" đ"),c:pctColor(pnl)},
+              {lbl:"Tỷ suất",val:pnlPct?(parseFloat(pnlPct)>=0?"+":"")+pnlPct+"%":"—",c:pctColor(parseFloat(pnlPct||0))},
+            ]:[]),
+          ].map(s => (
+            <div key={s.lbl} style={{background:"#1e293b",borderRadius:10,padding:"8px 14px",borderTop:`2px solid ${s.c}`}}>
+              <div style={{fontSize:13,fontWeight:700,color:s.c}}>{s.val}</div>
+              <div style={{fontSize:10,color:"#475569"}}>{s.lbl}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{display:"flex",gap:12,marginBottom:16,alignItems:"flex-end",flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:150}}>
+          <label style={labelS}>Giá hiện tại ({unit}) — để tính lãi/lỗ</label>
+          <input style={inputS} type="number" value={curPrice} onChange={e=>setCurPrice(e.target.value)} placeholder={isCrypto?"VD: 65000":"VD: 38000"}/>
+        </div>
+        <button onClick={()=>setShowAdd(v=>!v)} style={{padding:"9px 18px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#3b82f6,#06b6d4)",color:"#fff",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+          {showAdd?"▲ Ẩn":"+ Thêm lệnh DCA"}
+        </button>
+      </div>
+
+      {showAdd && (
+        <div style={{background:"#1e293b",borderRadius:12,padding:16,marginBottom:16,border:"1px solid #334155"}}>
+          <div style={{fontSize:13,color:"#38bdf8",fontWeight:700,marginBottom:12}}>Nhập lệnh DCA mới</div>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+            {[{l:"Ngày mua",k:"date",t:"date"},{l:`Số lượng`,k:"qty",t:"number",p:`VD: ${isCrypto?"0.01":"100"}`},{l:`Giá mua (${unit})`,k:"price",t:"number",p:`VD: ${isCrypto?"60000":"35000"}`},{l:"Ghi chú",k:"note",t:"text",p:"Tuỳ chọn"}].map(f => (
+              <div key={f.k} style={{flex:1,minWidth:130}}>
+                <label style={labelS}>{f.l}</label>
+                <input style={inputS} type={f.t} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p}/>
+              </div>
+            ))}
+            <div style={{display:"flex",alignItems:"flex-end"}}>
+              <button onClick={addEntry} style={{padding:"9px 18px",borderRadius:8,border:"none",background:"#22c55e",color:"#fff",fontWeight:700,cursor:"pointer"}}>Thêm</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {entries.length === 0 ? (
+        <div style={{textAlign:"center",padding:32,color:"#475569",fontSize:13}}>Chưa có lệnh DCA nào cho {activeAsset}. Nhấn "+ Thêm lệnh DCA" để bắt đầu.</div>
+      ) : (
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr style={{background:"#111827"}}>
+                {["Ngày","Số lượng",`Giá mua (${unit})`,`Chi phí (${unit})`,"Ghi chú",""].map(h => (
+                  <th key={h} style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontWeight:600,whiteSpace:"nowrap",borderBottom:"1px solid #1e293b"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e,i) => (
+                <tr key={e.id} style={{background:i%2===0?"#0a0f1e":"#0d1526"}}>
+                  <td style={{padding:"8px 12px",color:"#94a3b8"}}>{e.date}</td>
+                  <td style={{padding:"8px 12px",color:"#e2e8f0",fontWeight:600}}>{e.qty}</td>
+                  <td style={{padding:"8px 12px",color:"#38bdf8"}}>{isCrypto?fUSD(e.price):fNum(e.price)}</td>
+                  <td style={{padding:"8px 12px",color:"#94a3b8"}}>{isCrypto?fUSD(e.qty*e.price):fNum(Math.round(e.qty*e.price))}</td>
+                  <td style={{padding:"8px 12px",color:"#64748b",fontSize:11}}>{e.note}</td>
+                  <td style={{padding:"8px 12px"}}>
+                    <button onClick={()=>delEntry(e.id)} style={{padding:"2px 8px",borderRadius:5,border:"none",background:"#7f1d1d",color:"#fca5a5",cursor:"pointer",fontSize:11}}>Xóa</button>
+                  </td>
+                </tr>
+              ))}
+              <tr style={{background:"#1e293b",fontWeight:700}}>
+                <td style={{padding:"8px 12px",color:"#38bdf8"}}>Tổng / Trung bình</td>
+                <td style={{padding:"8px 12px",color:"#e2e8f0"}}>{totalQty.toFixed(totalQty<10?6:2)}</td>
+                <td style={{padding:"8px 12px",color:"#fbbf24"}}>{isCrypto?fUSD(avgPrice):fNum(Math.round(avgPrice))} (TB)</td>
+                <td style={{padding:"8px 12px",color:"#e2e8f0"}}>{isCrypto?fUSD(totalCost):fNum(Math.round(totalCost))}</td>
+                <td colSpan={2}/>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SECTION: AI Analysis ──────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function AiSection({ prices, priceSource, now }) {
+  const [aiMsg, setAiMsg] = useState("");
+  const [aiReply, setAiReply] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const allStocks = [...AZFIN.tanCong,...AZFIN.canBang,...AZFIN.phongThu].map(s => {
+    const p = prices[s.ma];
+    return {...s, giaHT: p?.lastPrice||null, changePct: p?.changePct??null, pct: pctFromTS(p?.lastPrice||null, s.ngungTS)};
+  });
+
+  async function askAI() {
+    if (!aiMsg.trim()) return;
+    setAiLoading(true); setAiReply("");
+    const summary = allStocks.filter(s=>s.giaHT).slice(0,15)
+      .map(s=>`${s.ma}: ngưỡngTS=${s.ngungTS}, giáHT=${Math.round(s.giaHT)}, cáchNgưỡng=${s.pct}%, thayĐổi=${s.changePct}%`).join("; ");
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-calls":"true"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:1000,
+          system:`Bạn là chuyên gia phân tích tài chính Việt Nam. Dữ liệu realtime từ ${priceSource||"AzFin"}: ${summary}. Ngày: ${now.toLocaleDateString("vi-VN")}. Trả lời ngắn gọn, chuyên nghiệp, tiếng Việt.`,
+          messages:[{role:"user",content:aiMsg}]
+        })
+      });
+      const d = await res.json();
+      setAiReply(d.content?.[0]?.text || "Không có phản hồi.");
+    } catch(e) { setAiReply("Lỗi: " + e.message); }
+    setAiLoading(false);
+  }
+
+  return (
+    <div style={{maxWidth:640,margin:"0 auto"}}>
+      <div style={{background:"#1e293b",borderRadius:16,padding:24}}>
+        <h3 style={{color:"#a78bfa",marginTop:0,fontSize:16}}>🤖 AI Phân tích & Gợi ý</h3>
+        <div style={{background:"#0f172a",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:11,color:"#fbbf24",border:"1px solid #fbbf2444"}}>
+          ⚠️ <b>Cần API key:</b> Tìm dòng <code style={{color:"#38bdf8"}}>anthropic-dangerous-direct-browser-calls</code> trong file HTML và đảm bảo bạn đã set API key trong header Authorization.
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+          {["Cổ phiếu nào gần ngưỡng TS nhất?","Phân tích danh mục phòng thủ","Mã nào đang dưới ngưỡng tích sản?","Nên DCA coin nào tuần này?"].map(q => (
+            <button key={q} onClick={()=>setAiMsg(q)} style={{padding:"5px 12px",borderRadius:20,border:"1px solid #334155",background:"#0f172a",color:"#94a3b8",fontSize:11,cursor:"pointer"}}>{q}</button>
+          ))}
+        </div>
+        <textarea value={aiMsg} onChange={e=>setAiMsg(e.target.value)} rows={3} placeholder="Nhập câu hỏi về cổ phiếu, crypto, DCA..."
+          style={{width:"100%",padding:"12px 14px",borderRadius:10,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:13,outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
+        <button onClick={askAI} disabled={aiLoading||!aiMsg.trim()} style={{marginTop:10,padding:"10px 24px",borderRadius:10,border:"none",cursor:aiLoading||!aiMsg.trim()?"not-allowed":"pointer",background:"linear-gradient(135deg,#7c3aed,#3b82f6)",color:"#fff",fontWeight:700,fontSize:14,opacity:aiLoading||!aiMsg.trim()?0.5:1}}>
+          {aiLoading?"⏳ Đang phân tích...":"✨ Phân tích ngay"}
+        </button>
+        {aiReply && (
+          <div style={{marginTop:16,background:"#0a0f1e",borderRadius:10,padding:16,borderLeft:"3px solid #7c3aed"}}>
+            <div style={{fontSize:11,color:"#7c3aed",marginBottom:8,fontWeight:700}}>🤖 AI PHÂN TÍCH</div>
+            <div style={{fontSize:13,color:"#cbd5e1",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{aiReply}</div>
+          </div>
+        )}
+        <div style={{marginTop:12,fontSize:11,color:"#475569"}}>⚠️ AI chỉ mang tính tham khảo, không phải tư vấn đầu tư chính thức.</div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SECTION: Fund (ETF) Management ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function FundSection({ prices, athMap, athLoading }) {
+  return (
+    <div>
+      <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontWeight:700,fontSize:16,color:"#38bdf8"}}>📊 Quản lý Chứng chỉ Quỹ ETF</span>
+        <span style={{fontSize:11,color:"#475569"}}>{ETF_LIST.length} quỹ theo dõi</span>
+      </div>
+      <div style={{borderRadius:12,overflow:"hidden",border:"1px solid #3b82f644"}}>
+        <div style={{background:"linear-gradient(90deg,#3b82f622,transparent)",padding:"10px 16px",borderBottom:"1px solid #3b82f633"}}>
+          <span style={{fontWeight:700,fontSize:14,color:"#3b82f6"}}>📊 Danh sách ETF</span>
+        </div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr style={{background:"#111827"}}>
+                {[
+                  {l:"Mã Quỹ"},{l:"Tên quỹ"},{l:"Giá HT ⚡",hi:1},
+                  {l:athLoading?"ATH ⏳":"ATH"},{l:"% từ ATH"},{l:"% thay đổi"},
+                ].map(col => (
+                  <th key={col.l} style={{padding:"9px 12px",textAlign:"left",color:col.hi?"#38bdf8":"#64748b",fontWeight:600,whiteSpace:"nowrap",borderBottom:"1px solid #1e293b"}}>{col.l}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ETF_LIST.map((etf, i) => {
+                const p = prices[etf.ma] || {};
+                const giaHT = p.lastPrice || null;
+                const ath = athMap[etf.ma] || null;
+                const tdc = p.changePct == null ? "#475569" : p.changePct >= 0 ? "#4ade80" : "#f87171";
+                return (
+                  <tr key={etf.ma} style={{background:i%2===0?"#0a0f1e":"#0d1526",borderLeft:"3px solid #3b82f655"}}>
+                    <td style={{padding:"8px 12px",fontWeight:700,fontSize:13,color:"#fff"}}>{etf.ma}</td>
+                    <td style={{padding:"8px 12px",color:"#94a3b8",fontSize:11}}>{etf.ten}</td>
+                    <td style={{padding:"8px 12px"}}>
+                      {giaHT ? <span style={{color:"#38bdf8",fontWeight:700,fontSize:13}}>{(giaHT/1000).toFixed(1)}</span>
+                             : <span style={{color:"#334155",fontSize:10}}>—</span>}
+                    </td>
+                    <td style={{padding:"8px 12px",color:"#94a3b8",fontSize:12}}>
+                      {ath ? (ath/1000).toFixed(1) : athLoading ? <span style={{color:"#475569",fontSize:10}}>⏳</span> : "—"}
+                    </td>
+                    <ATHDropCell ath={ath} giaHT={giaHT}/>
+                    <td style={{padding:"8px 12px",color:tdc,fontWeight:700}}>
+                      {p.changePct != null ? (p.changePct>=0?"+":"")+p.changePct.toFixed(2)+"%" : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div style={{marginTop:12,display:"flex",gap:12,flexWrap:"wrap"}}>
+        {[["#4ade80","0–10% từ ATH (gần đỉnh)"],["#fbbf24","10–30% từ ATH (trung bình)"],["#f87171",">30% từ ATH (xa đỉnh)"]].map(([c,l]) => (
+          <div key={l} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:"#64748b"}}>
+            <div style={{width:10,height:10,borderRadius:2,background:c}}/>{l}
+          </div>
+        ))}
+      </div>
+      <div style={{marginTop:10,padding:"8px 14px",background:"#1e293b",borderRadius:8,fontSize:11,color:"#64748b"}}>
+        ℹ️ ATH tự động cập nhật theo giá cao nhất đã quan sát. Giá HT tính theo đơn vị nghìn đồng (k).
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Alert helpers ─────────────────────────────────────────────────────────────
+function computeAlerts(prices, athMap, cryptoAth, cryptoPrices) {
+  const alerts = [];
+
+  for (const bucket of [AZFIN.tanCong, AZFIN.canBang, AZFIN.phongThu]) {
+    for (const stock of bucket) {
+      const p = prices[stock.ma]; const ath = athMap[stock.ma];
+      if (!p?.lastPrice || !ath) continue;
+      const dd = ((p.lastPrice - ath) / ath) * 100;
+      const level = dd <= -58 ? "BUY_NOW" : dd <= -55 ? "APPROACHING" : null;
+      if (!level) continue;
+      alerts.push({ key:`${stock.ma}_${level==="BUY_NOW"?"buy_now":"approaching"}`,
+        type:"stock", symbol:stock.ma, currentPrice:p.lastPrice, ath, drawdown:dd, level });
+    }
+  }
+
+  for (const etf of ETF_LIST) {
+    const sym = typeof etf === "string" ? etf : etf.ma;
+    const p = prices[sym]; const ath = athMap[sym];
+    if (!p?.lastPrice || !ath) continue;
+    const dd = ((p.lastPrice - ath) / ath) * 100;
+    const level = dd <= -30 ? "BUY_NOW" : dd <= -25 ? "APPROACHING" : null;
+    if (!level) continue;
+    alerts.push({ key:`${sym}_${level==="BUY_NOW"?"buy_now":"approaching"}`,
+      type:"etf", symbol:sym, currentPrice:p.lastPrice, ath, drawdown:dd, level });
+  }
+
+  for (const coin of COINS_DEF) {
+    if (!coin.isGrid) continue;
+    const ath = cryptoAth[coin.id]; const p = cryptoPrices[coin.id];
+    if (!p?.price || !ath) continue;
+    const dd = ((p.price - ath) / ath) * 100;
+    const threshold = coin.id === "BTC" ? -40 : -50;
+    if (dd >= threshold) continue;
+    const [gridTop, gridBottom] = coin.id === "BTC" ? [0.6*ath, 0.3*ath] : [0.5*ath, 0.2*ath];
+    alerts.push({ key:`${coin.id}_grid`, type:"crypto", symbol:coin.id,
+      currentPrice:p.price, ath, drawdown:dd, level:"GRID_FUTURE", gridTop, gridBottom });
+  }
+
+  return alerts;
+}
+
+function sendAlertNotif(alert) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const labels = { BUY_NOW:"⚡ Mua Ngay!", APPROACHING:"👀 Sắp tới ngưỡng", GRID_FUTURE:"🤖 Tạo Ngay Grid Long Future" };
+  const priceStr = alert.type === "crypto"
+    ? "$" + alert.currentPrice.toLocaleString()
+    : (alert.currentPrice/1000).toFixed(1) + "k";
+  new Notification(`AzFin: ${alert.symbol}`, {
+    body: `${labels[alert.level]} — Giá: ${priceStr} | Drawdown: ${alert.drawdown.toFixed(1)}%`,
+    tag: alert.key,
+  });
+}
+
+// ── Alert Tab Component ───────────────────────────────────────────────────────
+function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze }) {
+  const SNOOZE_OPTS = [
+    { l:"1 ngày",  ms: 86400000 },
+    { l:"1 tuần",  ms: 604800000 },
+    { l:"1 tháng", ms: 2592000000 },
+    { l:"3 tháng", ms: 7776000000 },
+  ];
+  const snooze = (key, ms) =>
+    setAlertSnooze(prev => ({ ...prev, [key]: Date.now() + ms }));
+
+  const snoozed = Object.entries(alertSnooze).filter(([,v]) => v > Date.now());
+
+  const LEVEL_STYLE = {
+    BUY_NOW:     { bg:"#ef4444", label:"⚡ Mua Ngay!" },
+    APPROACHING: { bg:"#f59e0b", label:"👀 Sắp tới ngưỡng" },
+    GRID_FUTURE: { bg:"#3b82f6", label:"🤖 Tạo Ngay Grid Long Future" },
+  };
+
+  return (
+    <div>
+      <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontWeight:700,fontSize:16,color:"#38bdf8"}}>🔔 Cảnh báo Đầu tư</span>
+        <span style={{fontSize:11,color:"#475569"}}>{activeAlerts.length} cảnh báo đang hoạt động</span>
+        {activeAlerts.length === 0 && (
+          <span style={{color:"#4ade80",fontSize:13}}>✅ Giá đang ổn, không có cảnh báo nào</span>
+        )}
+      </div>
+
+      {activeAlerts.map(a => {
+        const { bg, label } = LEVEL_STYLE[a.level];
+        const priceStr = a.type === "crypto"
+          ? "$" + a.currentPrice.toLocaleString("en-US", {maximumFractionDigits:2})
+          : (a.currentPrice/1000).toFixed(1) + "k";
+        const athStr = a.type === "crypto"
+          ? "$" + a.ath.toLocaleString("en-US", {maximumFractionDigits:2})
+          : (a.ath/1000).toFixed(1) + "k";
+        return (
+          <div key={a.key} style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",
+            marginBottom:10,borderLeft:`4px solid ${bg}`,border:`1px solid ${bg}44`}}>
+            <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6,flexWrap:"wrap"}}>
+              <span style={{background:bg,color:"#fff",borderRadius:4,padding:"2px 10px",
+                fontSize:11,fontWeight:700}}>{label}</span>
+              <span style={{fontWeight:700,fontSize:15,color:"#fff"}}>{a.symbol}</span>
+              <span style={{fontSize:11,color:"#64748b",background:"#0f172a",
+                borderRadius:4,padding:"1px 8px"}}>
+                {a.type==="stock"?"Cổ phiếu":a.type==="etf"?"Quỹ/ETF":"Crypto"}
+              </span>
+            </div>
+            <div style={{fontSize:12,color:"#cbd5e1",marginBottom:4}}>
+              Giá HT: <b style={{color:"#38bdf8"}}>{priceStr}</b>
+              &nbsp;·&nbsp;ATH: <b style={{color:"#94a3b8"}}>{athStr}</b>
+              &nbsp;·&nbsp;<span style={{color:"#f87171",fontWeight:700}}>Drawdown: {a.drawdown.toFixed(1)}%</span>
+            </div>
+            {a.level === "GRID_FUTURE" && (
+              <div style={{fontSize:12,color:"#93c5fd",marginBottom:6,background:"#1e40af22",
+                borderRadius:6,padding:"6px 10px",marginTop:4}}>
+                🤖 Tạo Ngay Grid Long Future &nbsp;|&nbsp;
+                Lưới trên: <b>${a.gridTop.toLocaleString("en-US",{maximumFractionDigits:0})}</b>
+                &nbsp;→&nbsp;
+                Lưới dưới: <b>${a.gridBottom.toLocaleString("en-US",{maximumFractionDigits:0})}</b>
+              </div>
+            )}
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8,alignItems:"center"}}>
+              <span style={{fontSize:11,color:"#475569"}}>Tắt thông báo:</span>
+              {SNOOZE_OPTS.map(opt => (
+                <button key={opt.l} onClick={() => snooze(a.key, opt.ms)}
+                  style={{background:"#334155",color:"#94a3b8",border:"none",borderRadius:5,
+                    padding:"3px 12px",fontSize:11,cursor:"pointer",fontWeight:500}}>
+                  {opt.l}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {snoozed.length > 0 && (
+        <details style={{marginTop:16}}>
+          <summary style={{cursor:"pointer",color:"#475569",fontSize:12,userSelect:"none"}}>
+            ⏸ Đã tắt tạm thời ({snoozed.length} cảnh báo)
+          </summary>
+          <div style={{marginTop:8,background:"#0f172a",borderRadius:8,padding:"8px 12px"}}>
+            {snoozed.map(([key, until]) => (
+              <div key={key} style={{display:"flex",gap:10,alignItems:"center",
+                padding:"5px 0",borderBottom:"1px solid #1e293b",fontSize:11}}>
+                <span style={{color:"#94a3b8",flex:1}}>{key}</span>
+                <span style={{color:"#475569"}}>
+                  Hết hạn: {new Date(until).toLocaleString("vi-VN")}
+                </span>
+                <button onClick={() => setAlertSnooze(prev => {
+                    const n = {...prev}; delete n[key]; return n;
+                  })}
+                  style={{background:"#334155",color:"#e2e8f0",border:"none",
+                    borderRadius:4,padding:"2px 8px",fontSize:10,cursor:"pointer"}}>
+                  Hủy
+                </button>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      <div style={{marginTop:16,padding:"10px 14px",background:"#1e293b",borderRadius:8,
+        fontSize:11,color:"#64748b",borderTop:"1px solid #334155"}}>
+        ℹ️ Drawdown tính từ ATH. Cổ phiếu: ≤-58% mua ngay / -55% đến -57% sắp đến ngưỡng.
+        ETF: ≤-30% mua ngay / -25% đến -29% cảnh báo.
+        Crypto: BTC ≤-40% / ETH,BNB ≤-50% → Tạo Ngay Grid Long Future.
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function App() {
+  const [prices, setPrices] = useState({});
+  const [priceSource, setSource] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [lastLog, setLastLog] = useState("Đang khởi động...");
+  const [lastUpdated, setUpdated] = useState(null);
+  const [mainTab, setMainTab] = useState("stock");
+  const [stockSubTab, setStockSubTab] = useState("watchlist");
+  const [showLog, setShowLog] = useState(false);
+  const [now, setNow] = useState(new Date());
+  const [usdvnd, setUsdvnd] = useLS("azfin_usdvnd", 25500);
+  const [athMap, setAthMap] = useLS("azfin_ath_v1", {});
+  const [athLoading, setAthLoading] = useState(false);
+  const [cryptoAth, setCryptoAth] = useLS("azfin_crypto_ath_v1", {});
+  const [cryptoPrices, setCryptoPrices] = useState({});
+  const [alertSnooze, setAlertSnooze] = useLS("azfin_alert_snooze", {});
+  const [activeAlerts, setActiveAlerts] = useState([]);
+  const prevAlertsRef = useRef([]);
+
+  useEffect(() => { const t=setInterval(()=>setNow(new Date()),1000); return ()=>clearInterval(t); },[]);
+
+  const updateATH = useCallback((pricesData) => {
+    setAthMap(prev => {
+      const updated = {...prev};
+      for (const [code, data] of Object.entries(pricesData)) {
+        if (data.lastPrice && (!updated[code] || data.lastPrice > updated[code])) {
+          updated[code] = data.lastPrice;
+        }
+      }
+      return updated;
+    });
+  }, []);
+
+  const loadATH = useCallback(async () => {
+    const cacheTime = parseInt(localStorage.getItem('azfin_ath_time') || '0');
+    if (Date.now() - cacheTime < 24 * 60 * 60 * 1000 && Object.keys(athMap).length > 50) return;
+    setAthLoading(true);
+    try {
+      const newAth = await fetchHistoricalATH();
+      if (Object.keys(newAth).length > 0) {
+        setAthMap(prev => {
+          const merged = {...prev};
+          for (const [code, ath] of Object.entries(newAth)) {
+            merged[code] = Math.max(merged[code] || 0, ath);
+          }
+          return merged;
+        });
+        localStorage.setItem('azfin_ath_time', String(Date.now()));
+      }
+    } catch {}
+    setAthLoading(false);
+  }, [athMap]);
+
+  const load = useCallback(async () => {
+    const logArr=[];
+    const addLog = msg => { logArr.push(msg); setLastLog(msg); setLogs([...logArr]); };
+    const { map, source } = await fetchPrices(ALL_SYMBOLS, addLog);
+    if (Object.keys(map).length) { setPrices(map); setSource(source); setUpdated(new Date()); updateATH(map); }
+  }, [updateATH]);
+
+  const loadCrypto = useCallback(async () => {
+    const { map } = await fetchCryptoPrices();
+    if (!Object.keys(map).length) return;
+    setCryptoPrices(map);
+    setCryptoAth(prev => {
+      const updated = {...prev};
+      for (const [coin, data] of Object.entries(map)) {
+        if (data.ath) { updated[coin] = data.ath; }
+        else if (!updated[coin] || data.price > updated[coin]) { updated[coin] = data.price; }
+      }
+      return updated;
+    });
+  }, []);
+
+  useEffect(() => { load(); const t=setInterval(load,60000); return ()=>clearInterval(t); },[load]);
+  useEffect(() => { loadATH(); }, []);
+  useEffect(() => { loadCrypto(); const t=setInterval(loadCrypto,60000); return ()=>clearInterval(t); },[loadCrypto]);
+
+  useEffect(() => {
+    if (!Object.keys(prices).length && !Object.keys(cryptoPrices).length) return;
+    const allTriggered = computeAlerts(prices, athMap, cryptoAth, cryptoPrices);
+    const nowTs = Date.now();
+    const nonSnoozed = allTriggered.filter(a => {
+      const until = alertSnooze[a.key]; return !until || until < nowTs;
+    });
+    const prevKeys = new Set(prevAlertsRef.current.map(a => a.key));
+    const newOnes = nonSnoozed.filter(a => !prevKeys.has(a.key));
+    if (newOnes.length > 0) {
+      if ("Notification" in window && Notification.permission === "default")
+        Notification.requestPermission();
+      newOnes.forEach(a => sendAlertNotif(a));
+    }
+    prevAlertsRef.current = nonSnoozed;
+    setActiveAlerts(nonSnoozed);
+  }, [prices, athMap, cryptoAth, cryptoPrices, alertSnooze]);
+
+  const withData = Object.keys(prices).length;
+  const ft = d => d.toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+  const fd = d => d.toLocaleDateString("vi-VN",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+  const dotC = priceSource&&withData ? "#4ade80" : lastLog.startsWith("⏳") ? "#fbbf24" : "#f87171";
+
+  const mainTabs = [
+    {k:"stock",  l:"📈 Cổ phiếu"},
+    {k:"fund",   l:"📊 Quỹ"},
+    {k:"crypto", l:"🪙 Crypto"},
+    {k:"dca",    l:"🧮 DCA"},
+    {k:"ai",     l:"🤖 AI"},
+    {k:"alert",  l:"🔔 Đầu tư"},
+  ];
+
+  return (
+    <div style={{minHeight:"100vh"}}>
+      {/* Header */}
+      <div style={{background:"linear-gradient(135deg,#0f172a,#1e293b)",padding:"12px 20px",borderBottom:"1px solid #1e293b",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:38,height:38,background:"linear-gradient(135deg,#3b82f6,#06b6d4)",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:15,color:"#fff"}}>Az</div>
+          <div>
+            <div style={{fontWeight:700,fontSize:17,color:"#fff",letterSpacing:1}}>AzFin Dashboard</div>
+            <div style={{fontSize:10,color:"#475569"}}>TÍCH SẢN STOCK & CRYPTO • 05/2026</div>
+          </div>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap"}}>
+          {mainTabs.map(({k,l}) => (
+            <button key={k} onClick={()=>setMainTab(k)}
+              style={{...btnS(mainTab===k), position:"relative"}}>
+              {l}
+              {k==="alert" && activeAlerts.length > 0 && (
+                <span style={{
+                  position:"absolute", top:-4, right:-4,
+                  background:"#ef4444", color:"#fff", borderRadius:"50%",
+                  width:16, height:16, fontSize:9, fontWeight:700,
+                  display:"flex", alignItems:"center", justifyContent:"center"
+                }}>
+                  {activeAlerts.length > 99 ? "99+" : activeAlerts.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Status bar */}
+      <div style={{background:"#0f172a",padding:"8px 20px",display:"flex",alignItems:"center",gap:12,borderBottom:"1px solid #1e293b",flexWrap:"wrap"}}>
+        <span style={{fontSize:12,color:"#64748b"}}>{fd(now)}</span>
+        <span style={{fontSize:15,fontWeight:700,color:"#38bdf8",fontVariantNumeric:"tabular-nums"}}>{ft(now)}</span>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:dotC,boxShadow:`0 0 6px ${dotC}`}}/>
+          <span style={{fontSize:11,color:"#64748b",maxWidth:240,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lastLog}</span>
+          {lastUpdated && <span style={{fontSize:10,color:"#334155"}}>• {ft(lastUpdated)}</span>}
+        </div>
+        <button onClick={load} style={{padding:"3px 10px",borderRadius:6,border:"none",background:"#1e293b",color:"#64748b",cursor:"pointer",fontSize:11}}>↺ Làm mới</button>
+        <button onClick={()=>setShowLog(v=>!v)} style={{padding:"3px 10px",borderRadius:6,border:"none",background:"#1e293b",color:"#64748b",cursor:"pointer",fontSize:11}}>🔍 Log</button>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:11,color:"#475569"}}>USD/VND:</span>
+          <input type="number" value={usdvnd} onChange={e=>setUsdvnd(parseInt(e.target.value)||25500)}
+            style={{width:80,padding:"3px 8px",borderRadius:6,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:11,outline:"none"}}/>
+        </div>
+      </div>
+
+      {/* Log panel */}
+      {showLog && (
+        <div style={{background:"#0d1117",padding:"10px 20px",borderBottom:"1px solid #1e293b",fontSize:11,fontFamily:"monospace"}}>
+          <b style={{color:"#38bdf8"}}>📡 Connection log:</b>
+          <div style={{marginTop:4,color:"#64748b"}}>{logs.map((l,i)=><div key={i}>{l}</div>)}</div>
+          {priceSource && <div style={{marginTop:4,color:"#4ade80"}}>✅ Đang dùng: <b>{priceSource}</b></div>}
+        </div>
+      )}
+
+      <div style={{padding:"16px 20px"}}>
+        {/* ── STOCK TAB ── */}
+        {mainTab==="stock" && (
+          <div>
+            <div style={{display:"flex",gap:8,marginBottom:16}}>
+              <button onClick={()=>setStockSubTab("watchlist")} style={tabS(stockSubTab==="watchlist","#38bdf8")}>📋 Watchlist AzFin</button>
+              <button onClick={()=>setStockSubTab("portfolio")} style={tabS(stockSubTab==="portfolio","#4ade80")}>💼 Danh mục của tôi</button>
+            </div>
+            {stockSubTab==="watchlist" && <StockWatchlist prices={prices} priceSource={priceSource} athMap={athMap} athLoading={athLoading}/>}
+            {stockSubTab==="portfolio" && <StockPortfolio prices={prices}/>}
+          </div>
+        )}
+
+        {/* ── FUND TAB ── */}
+        {mainTab==="fund" && <FundSection prices={prices} athMap={athMap} athLoading={athLoading}/>}
+
+        {/* ── CRYPTO TAB ── */}
+        {mainTab==="crypto" && <CryptoSection usdvnd={usdvnd} cryptoPrices={cryptoPrices} setCryptoPrices={setCryptoPrices} cryptoAth={cryptoAth} setCryptoAth={setCryptoAth}/>}
+
+        {/* ── DCA TAB ── */}
+        {mainTab==="dca" && <DcaCalculator/>}
+
+        {/* ── AI TAB ── */}
+        {mainTab==="ai" && <AiSection prices={prices} priceSource={priceSource} now={now}/>}
+
+        {/* ── ALERT TAB ── */}
+        {mainTab==="alert" && <AlertTab activeAlerts={activeAlerts} alertSnooze={alertSnooze} setAlertSnooze={setAlertSnooze}/>}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
