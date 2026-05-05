@@ -1158,13 +1158,9 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze, investedAlerts, s
     setAlertSnooze(prev => ({ ...prev, [key]: Date.now() + ms }));
 
   const markInvested = (alert) => {
-    const priceStr = alert.type === "crypto"
-      ? "$" + alert.currentPrice.toLocaleString("en-US", {maximumFractionDigits:2})
-      : (alert.currentPrice/1000).toFixed(1) + "k";
     setInvestedAlerts(prev => [
       ...(prev||[]).filter(i => i.key !== alert.key),
-      { key:alert.key, symbol:alert.symbol, type:alert.type, level:alert.level,
-        priceStr, drawdown:alert.drawdown, ts:Date.now() }
+      { ...alert, ts:Date.now() }
     ]);
   };
   const unmarkInvested = (key) =>
@@ -1250,32 +1246,51 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze, investedAlerts, s
             padding:"8px 0",borderBottom:"1px solid #1e293b"}}>
             ✅ Đã Đầu Tư ({investedAlerts.length})
           </div>
-          <div style={{marginTop:8,background:"#0f172a",borderRadius:8,padding:"8px 12px"}}>
+          <div style={{marginTop:8}}>
             {(investedAlerts||[]).map(item => {
-              const ls = LEVEL_STYLE[item.level] || LEVEL_STYLE.BUY_NOW;
+              const { bg, label } = LEVEL_STYLE[item.level] || LEVEL_STYLE.BUY_NOW;
+              const priceStr = item.type === "crypto"
+                ? "$" + item.currentPrice.toLocaleString("en-US", {maximumFractionDigits:2})
+                : (item.currentPrice/1000).toFixed(1) + "k";
+              const athStr = item.type === "crypto"
+                ? "$" + item.ath.toLocaleString("en-US", {maximumFractionDigits:2})
+                : (item.ath/1000).toFixed(1) + "k";
               return (
-                <div key={item.key} style={{display:"flex",gap:8,alignItems:"center",
-                  padding:"8px 0",borderBottom:"1px solid #1e293b",flexWrap:"wrap"}}>
-                  <span style={{background:ls.bg+"33",color:ls.bg,border:`1px solid ${ls.bg}55`,
-                    borderRadius:4,padding:"1px 8px",fontSize:10,fontWeight:600}}>
-                    {ls.label}
-                  </span>
-                  <span style={{fontWeight:700,color:"#e2e8f0",fontSize:13}}>{item.symbol}</span>
-                  <span style={{fontSize:10,color:"#475569",background:"#1e293b",
-                    borderRadius:4,padding:"1px 6px"}}>
-                    {item.type==="stock"?"Cổ phiếu":item.type==="etf"?"Quỹ/ETF":"Crypto"}
-                  </span>
-                  <span style={{fontSize:11,color:"#64748b"}}>
-                    {item.priceStr} · <span style={{color:"#f87171"}}>{item.drawdown.toFixed(1)}%</span>
-                  </span>
-                  <span style={{fontSize:10,color:"#475569",flex:1}}>
-                    {new Date(item.ts).toLocaleDateString("vi-VN")}
-                  </span>
-                  <button onClick={() => unmarkInvested(item.key)}
-                    style={{background:"#334155",color:"#94a3b8",border:"none",
-                      borderRadius:4,padding:"2px 10px",fontSize:10,cursor:"pointer"}}>
-                    Hoàn tác
-                  </button>
+                <div key={item.key} style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",
+                  marginBottom:10,borderLeft:`4px solid ${bg}`,border:`1px solid ${bg}44`,opacity:0.75}}>
+                  <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6,flexWrap:"wrap"}}>
+                    <span style={{background:bg,color:"#fff",borderRadius:4,padding:"2px 10px",
+                      fontSize:11,fontWeight:700}}>{label}</span>
+                    <span style={{fontWeight:700,fontSize:15,color:"#fff"}}>{item.symbol}</span>
+                    <span style={{fontSize:11,color:"#64748b",background:"#0f172a",
+                      borderRadius:4,padding:"1px 8px"}}>
+                      {item.type==="stock"?"Cổ phiếu":item.type==="etf"?"Quỹ/ETF":"Crypto"}
+                    </span>
+                    <span style={{fontSize:10,color:"#475569",marginLeft:"auto"}}>
+                      Đã đầu tư: {new Date(item.ts).toLocaleDateString("vi-VN")}
+                    </span>
+                  </div>
+                  <div style={{fontSize:12,color:"#cbd5e1",marginBottom:4}}>
+                    Giá HT: <b style={{color:"#38bdf8"}}>{priceStr}</b>
+                    &nbsp;·&nbsp;ATH: <b style={{color:"#94a3b8"}}>{athStr}</b>
+                    &nbsp;·&nbsp;<span style={{color:"#f87171",fontWeight:700}}>Drawdown: {item.drawdown.toFixed(1)}%</span>
+                  </div>
+                  {item.level === "GRID_FUTURE" && (
+                    <div style={{fontSize:12,color:"#93c5fd",marginBottom:6,background:"#1e40af22",
+                      borderRadius:6,padding:"6px 10px",marginTop:4}}>
+                      🤖 Tạo Ngay Grid Long Future &nbsp;|&nbsp;
+                      Lưới trên: <b>${item.gridTop.toLocaleString("en-US",{maximumFractionDigits:0})}</b>
+                      &nbsp;→&nbsp;
+                      Lưới dưới: <b>${item.gridBottom.toLocaleString("en-US",{maximumFractionDigits:0})}</b>
+                    </div>
+                  )}
+                  <div style={{marginTop:8}}>
+                    <button onClick={() => unmarkInvested(item.key)}
+                      style={{background:"#334155",color:"#94a3b8",border:"none",
+                        borderRadius:5,padding:"3px 12px",fontSize:11,cursor:"pointer",fontWeight:500}}>
+                      Hoàn tác
+                    </button>
+                  </div>
                 </div>
               );
             })}
