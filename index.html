@@ -1226,9 +1226,9 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze, investedAlerts, s
             )}
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8,alignItems:"center"}}>
               <button onClick={() => markInvested(a)}
-                style={{background:"#166534",color:"#4ade80",border:"1px solid #16a34a",borderRadius:5,
-                  padding:"3px 12px",fontSize:11,cursor:"pointer",fontWeight:600}}>
-                ✅ Đã đầu tư
+                style={{background:"#334155",color:"#94a3b8",border:"none",borderRadius:5,
+                  padding:"3px 12px",fontSize:11,cursor:"pointer",fontWeight:500}}>
+                Đã đầu tư
               </button>
               <span style={{fontSize:11,color:"#475569"}}>Tắt thông báo:</span>
               {SNOOZE_OPTS.map(opt => (
@@ -1244,11 +1244,11 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze, investedAlerts, s
       })}
 
       {(investedAlerts||[]).length > 0 && (
-        <details style={{marginTop:16}} open>
-          <summary style={{cursor:"pointer",color:"#4ade80",fontSize:13,fontWeight:600,
-            userSelect:"none",padding:"8px 0",borderBottom:"1px solid #1e293b"}}>
+        <div style={{marginTop:16}}>
+          <div style={{color:"#4ade80",fontSize:13,fontWeight:600,
+            padding:"8px 0",borderBottom:"1px solid #1e293b"}}>
             ✅ Đã Đầu Tư ({investedAlerts.length})
-          </summary>
+          </div>
           <div style={{marginTop:8,background:"#0f172a",borderRadius:8,padding:"8px 12px"}}>
             {(investedAlerts||[]).map(item => {
               const ls = LEVEL_STYLE[item.level] || LEVEL_STYLE.BUY_NOW;
@@ -1279,7 +1279,7 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze, investedAlerts, s
               );
             })}
           </div>
-        </details>
+        </div>
       )}
 
       {snoozed.length > 0 && (
