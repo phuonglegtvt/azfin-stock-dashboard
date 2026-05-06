@@ -9,9 +9,9 @@ module.exports = async (req, res) => {
     return res.status(405).send("Method Not Allowed");
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ content: [{ text: "Lỗi: GEMINI_API_KEY chưa được set trên Vercel." }] });
+    return res.status(500).json({ content: [{ text: "Lỗi: GROQ_API_KEY chưa được set." }] });
   }
 
   const body = req.body;
@@ -19,38 +19,37 @@ module.exports = async (req, res) => {
     return res.status(400).json({ content: [{ text: "Lỗi: Request body không hợp lệ." }] });
   }
 
-  const messages = body.messages.map(m => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }]
-  }));
-
-  if (body.system && messages.length > 0 && messages[0].role === "user") {
-    messages[0].parts[0].text = body.system + "\n\n" + messages[0].parts[0].text;
+  const messages = body.messages.map(m => ({ role: m.role, content: m.content }));
+  if (body.system) {
+    messages.unshift({ role: "system", content: body.system });
   }
 
-  const geminiBody = {
-    contents: messages,
-    generationConfig: { maxOutputTokens: body.max_tokens || 1000 }
+  const groqBody = {
+    model: "llama-3.3-70b-versatile",
+    messages,
+    max_tokens: body.max_tokens || 1000
   };
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-  let geminiRes, data;
+  let groqRes, data;
   try {
-    geminiRes = await fetch(url, {
+    groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiBody)
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(groqBody)
     });
-    data = await geminiRes.json();
+    data = await groqRes.json();
   } catch (e) {
-    return res.status(500).json({ content: [{ text: "Lỗi kết nối tới Gemini: " + e.message }] });
+    return res.status(500).json({ content: [{ text: "Lỗi kết nối tới Groq: " + e.message }] });
   }
 
-  if (!geminiRes.ok) {
+  if (!groqRes.ok) {
     const errMsg = data?.error?.message || JSON.stringify(data);
-    return res.status(geminiRes.status).json({ content: [{ text: "Lỗi Gemini API: " + errMsg }] });
+    return res.status(groqRes.status).json({ content: [{ text: "Lỗi Groq API: " + errMsg }] });
   }
 
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "Gemini không trả về nội dung.";
+  const text = data.choices?.[0]?.message?.content || "Groq không trả về nội dung.";
   res.status(200).json({ content: [{ text }] });
 };
