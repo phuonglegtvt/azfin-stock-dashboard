@@ -1123,11 +1123,21 @@ function computeAlerts(prices, athMap, cryptoAth, cryptoPrices) {
     const ath = cryptoAth[coin.id]; const p = cryptoPrices[coin.id];
     if (!p?.price || !ath) continue;
     const dd = ((p.price - ath) / ath) * 100;
-    const threshold = coin.id === "BTC" ? -40 : -50;
-    if (dd >= threshold) continue;
-    const [gridTop, gridBottom] = coin.id === "BTC" ? [0.6*ath, 0.3*ath] : [0.5*ath, 0.2*ath];
-    alerts.push({ key:`${coin.id}_grid`, type:"crypto", symbol:coin.id,
-      currentPrice:p.price, ath, drawdown:dd, level:"GRID_FUTURE", gridTop, gridBottom });
+    let level = null, gridTop = 0, gridBottom = 0;
+    if (coin.id === "BTC") {
+      if      (dd <= -70) { level="GRID_FUTURE_4"; gridTop=0.3*ath; gridBottom=0.2*ath; }
+      else if (dd <= -60) { level="GRID_FUTURE_3"; gridTop=0.4*ath; gridBottom=0.3*ath; }
+      else if (dd <= -50) { level="GRID_FUTURE_2"; gridTop=0.5*ath; gridBottom=0.4*ath; }
+      else if (dd <= -40) { level="GRID_FUTURE_1"; gridTop=0.6*ath; gridBottom=0.5*ath; }
+    } else {
+      if      (dd <= -70) { level="GRID_FUTURE_3"; gridTop=0.3*ath; gridBottom=0.2*ath; }
+      else if (dd <= -60) { level="GRID_FUTURE_2"; gridTop=0.4*ath; gridBottom=0.3*ath; }
+      else if (dd <= -50) { level="GRID_FUTURE_1"; gridTop=0.5*ath; gridBottom=0.4*ath; }
+    }
+    if (!level) continue;
+    const lvNum = level.slice(-1);
+    alerts.push({ key:`${coin.id}_grid_${lvNum}`, type:"crypto", symbol:coin.id,
+      currentPrice:p.price, ath, drawdown:dd, level, gridTop, gridBottom });
   }
 
   return alerts;
@@ -1135,7 +1145,7 @@ function computeAlerts(prices, athMap, cryptoAth, cryptoPrices) {
 
 function sendAlertNotif(alert) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const labels = { BUY_NOW_2:"⚡⚡ Mua Ngay Lần 2!", BUY_NOW:"⚡ Mua Ngay!", APPROACHING:"👀 Sắp tới ngưỡng", GRID_FUTURE:"🤖 Tạo Ngay Grid Long Future" };
+  const labels = { BUY_NOW_2:"⚡⚡ Mua Ngay Lần 2!", BUY_NOW:"⚡ Mua Ngay!", APPROACHING:"👀 Sắp tới ngưỡng", GRID_FUTURE_1:"🤖 Tạo Grid Future Ngay", GRID_FUTURE_2:"🤖 Tạo Grid Future Ngay Lần 2", GRID_FUTURE_3:"🤖 Tạo Grid Future Ngay Lần 3", GRID_FUTURE_4:"🤖 Tạo Grid Future Ngay Lần 4" };
   const priceStr = alert.type === "crypto"
     ? "$" + alert.currentPrice.toLocaleString()
     : (alert.currentPrice/1000).toFixed(1) + "k";
@@ -1170,10 +1180,13 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze, investedAlerts, s
   const visibleAlerts = activeAlerts.filter(a => !investedKeys.has(a.key));
 
   const LEVEL_STYLE = {
-    BUY_NOW_2:   { bg:"#dc2626", label:"⚡⚡ Mua Ngay Lần 2!" },
-    BUY_NOW:     { bg:"#ef4444", label:"⚡ Mua Ngay!" },
-    APPROACHING: { bg:"#f59e0b", label:"👀 Sắp tới ngưỡng" },
-    GRID_FUTURE: { bg:"#3b82f6", label:"🤖 Tạo Ngay Grid Long Future" },
+    BUY_NOW_2:    { bg:"#dc2626", label:"⚡⚡ Mua Ngay Lần 2!" },
+    BUY_NOW:      { bg:"#ef4444", label:"⚡ Mua Ngay!" },
+    APPROACHING:  { bg:"#f59e0b", label:"👀 Sắp tới ngưỡng" },
+    GRID_FUTURE_1:{ bg:"#3b82f6", label:"🤖 Tạo Grid Future Ngay" },
+    GRID_FUTURE_2:{ bg:"#2563eb", label:"🤖 Tạo Grid Future Ngay Lần 2" },
+    GRID_FUTURE_3:{ bg:"#1d4ed8", label:"🤖 Tạo Grid Future Ngay Lần 3" },
+    GRID_FUTURE_4:{ bg:"#1e40af", label:"🤖 Tạo Grid Future Ngay Lần 4" },
   };
 
   return (
@@ -1211,7 +1224,7 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze, investedAlerts, s
               &nbsp;·&nbsp;ATH: <b style={{color:"#94a3b8"}}>{athStr}</b>
               &nbsp;·&nbsp;<span style={{color:"#f87171",fontWeight:700}}>Drawdown: {a.drawdown.toFixed(1)}%</span>
             </div>
-            {a.level === "GRID_FUTURE" && (
+            {a.level.startsWith("GRID_FUTURE") && (
               <div style={{fontSize:12,color:"#93c5fd",marginBottom:6,background:"#1e40af22",
                 borderRadius:6,padding:"6px 10px",marginTop:4}}>
                 🤖 Tạo Ngay Grid Long Future &nbsp;|&nbsp;
@@ -1274,7 +1287,7 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze, investedAlerts, s
                     &nbsp;·&nbsp;ATH: <b style={{color:"#94a3b8"}}>{athStr}</b>
                     &nbsp;·&nbsp;<span style={{color:"#f87171",fontWeight:700}}>Drawdown: {item.drawdown.toFixed(1)}%</span>
                   </div>
-                  {item.level === "GRID_FUTURE" && (
+                  {item.level.startsWith("GRID_FUTURE") && (
                     <div style={{fontSize:12,color:"#93c5fd",marginBottom:6,background:"#1e40af22",
                       borderRadius:6,padding:"6px 10px",marginTop:4}}>
                       🤖 Tạo Ngay Grid Long Future &nbsp;|&nbsp;
@@ -1325,9 +1338,100 @@ function AlertTab({ activeAlerts, alertSnooze, setAlertSnooze, investedAlerts, s
 
       <div style={{marginTop:16,padding:"10px 14px",background:"#1e293b",borderRadius:8,
         fontSize:11,color:"#64748b",borderTop:"1px solid #334155"}}>
-        ℹ️ Drawdown tính từ ATH. Cổ phiếu: ≤-68% mua lần 2 / ≤-58% mua ngay / -55% đến -57% sắp đến ngưỡng.
-        ETF: ≤-30% mua ngay / -25% đến -29% cảnh báo.
-        Crypto: BTC ≤-40% / ETH,BNB ≤-50% → Tạo Ngay Grid Long Future.
+        ℹ️ Drawdown tính từ ATH. Cổ phiếu: ≤-68% mua lần 2 / ≤-58% mua ngay / -55% đến -57% sắp đến ngưỡng. ETF: ≤-30% mua ngay / -25% đến -29% cảnh báo.
+        BTC: ≤-40% Lần 1 / ≤-50% Lần 2 / ≤-60% Lần 3 / ≤-70% Lần 4. ETH,BNB: ≤-50% Lần 1 / ≤-60% Lần 2 / ≤-70% Lần 3.
+      </div>
+    </div>
+  );
+}
+
+// ── Todo Tab Component ────────────────────────────────────────────────────────
+function TodoTab() {
+  const PERIODS = [
+    { key:"day",   l:"📅 Hôm nay",  color:"#38bdf8" },
+    { key:"week",  l:"📆 Tuần này", color:"#a78bfa" },
+    { key:"month", l:"🗓 Tháng này", color:"#fb923c" },
+    { key:"year",  l:"🎯 Năm nay",  color:"#4ade80" },
+  ];
+  const [todos, setTodos] = useLS("azfin_todos", {});
+  const [inputs, setInputs] = React.useState({day:"",week:"",month:"",year:""});
+
+  const addTodo = (period) => {
+    const text = inputs[period].trim();
+    if (!text) return;
+    setTodos(prev => ({ ...prev, [period]: [...(prev[period]||[]), {id:Date.now(), text, done:false}] }));
+    setInputs(prev => ({ ...prev, [period]:"" }));
+  };
+  const toggleTodo = (period, id) =>
+    setTodos(prev => ({ ...prev, [period]: (prev[period]||[]).map(t => t.id===id ? {...t,done:!t.done} : t) }));
+  const deleteTodo = (period, id) =>
+    setTodos(prev => ({ ...prev, [period]: (prev[period]||[]).filter(t => t.id!==id) }));
+
+  return (
+    <div>
+      <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontWeight:700,fontSize:16,color:"#38bdf8"}}>📋 Mục tiêu & Công việc</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+        {PERIODS.map(({key, l, color}) => {
+          const items = todos[key] || [];
+          const doneCount = items.filter(t=>t.done).length;
+          return (
+            <div key={key} style={{background:"#1e293b",borderRadius:10,padding:"14px 16px",
+              borderTop:`3px solid ${color}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                <span style={{fontWeight:700,fontSize:13,color}}>{l}</span>
+                {items.length > 0 && (
+                  <span style={{fontSize:10,color:"#475569",background:"#0f172a",
+                    borderRadius:10,padding:"1px 8px"}}>
+                    {doneCount}/{items.length}
+                  </span>
+                )}
+              </div>
+              <div style={{display:"flex",gap:6,marginBottom:10}}>
+                <input value={inputs[key]}
+                  onChange={e => setInputs(prev=>({...prev,[key]:e.target.value}))}
+                  onKeyDown={e => e.key==="Enter" && addTodo(key)}
+                  placeholder="Thêm công việc..."
+                  style={{flex:1,background:"#0f172a",border:"1px solid #334155",borderRadius:6,
+                    padding:"5px 10px",fontSize:12,color:"#e2e8f0",outline:"none"}}
+                />
+                <button onClick={() => addTodo(key)}
+                  style={{background:color,color:"#000",border:"none",borderRadius:6,
+                    padding:"5px 14px",fontSize:16,cursor:"pointer",fontWeight:700,lineHeight:1}}>
+                  +
+                </button>
+              </div>
+              <div>
+                {items.length === 0 && (
+                  <div style={{fontSize:11,color:"#334155",textAlign:"center",padding:"10px 0"}}>
+                    Chưa có công việc
+                  </div>
+                )}
+                {items.map(t => (
+                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,
+                    padding:"6px 0",borderBottom:"1px solid #0f172a"}}>
+                    <div onClick={() => toggleTodo(key,t.id)}
+                      style={{width:16,height:16,borderRadius:4,flexShrink:0,cursor:"pointer",
+                        border:`2px solid ${t.done?color:"#475569"}`,background:t.done?color:"transparent",
+                        display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {t.done && <span style={{fontSize:10,color:"#000",fontWeight:700,lineHeight:1}}>✓</span>}
+                    </div>
+                    <span style={{flex:1,fontSize:12,color:t.done?"#475569":"#e2e8f0",
+                      textDecoration:t.done?"line-through":"none",wordBreak:"break-word"}}>
+                      {t.text}
+                    </span>
+                    <button onClick={() => deleteTodo(key,t.id)}
+                      style={{background:"none",border:"none",color:"#475569",cursor:"pointer",
+                        fontSize:16,padding:"0 2px",lineHeight:1,flexShrink:0}}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1445,6 +1549,7 @@ function App() {
     {k:"dca",    l:"🧮 DCA"},
     {k:"ai",     l:"🤖 AI"},
     {k:"alert",  l:"🔔 Đầu tư"},
+    {k:"todo",   l:"📋 Todo"},
   ];
 
   return (
@@ -1532,6 +1637,7 @@ function App() {
 
         {/* ── ALERT TAB ── */}
         {mainTab==="alert" && <AlertTab activeAlerts={activeAlerts} alertSnooze={alertSnooze} setAlertSnooze={setAlertSnooze} investedAlerts={investedAlerts} setInvestedAlerts={setInvestedAlerts}/>}
+        {mainTab==="todo" && <TodoTab/>}
       </div>
     </div>
   );
