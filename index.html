@@ -14,6 +14,9 @@
     ::-webkit-scrollbar-track { background: #0f172a }
     ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px }
     textarea, input, select { font-family: 'Segoe UI', sans-serif }
+    input[type="date"], input[type="time"] { color-scheme: dark }
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 200 }
     .modal-box { background: #1e293b; border-radius: 16px; padding: 24px; width: 380px; max-width: 95vw; border: 1px solid #334155 }
   </style>
@@ -529,12 +532,12 @@ function StockPortfolio({ prices }) {
   const [form, setForm] = useState({ ma:"", soLuong:"", giaMuaTB:"", ghiChu:"" });
 
   const openAdd = () => { setEditItem(null); setForm({ma:"",soLuong:"",giaMuaTB:"",ghiChu:""}); setShowModal(true); };
-  const openEdit = item => { setEditItem(item); setForm({ma:item.ma,soLuong:String(item.soLuong),giaMuaTB:String(item.giaMuaTB),ghiChu:item.ghiChu||""}); setShowModal(true); };
+  const openEdit = item => { setEditItem(item); setForm({ma:item.ma,soLuong:String(item.soLuong),giaMuaTB:String((item.giaMuaTB||0)/1000),ghiChu:item.ghiChu||""}); setShowModal(true); };
   const del = id => setHoldings(holdings.filter(h => h.id !== id));
 
   const save = () => {
     if (!form.ma || !form.soLuong || !form.giaMuaTB) return;
-    const item = { id: editItem?.id || Date.now(), ma: form.ma.toUpperCase(), soLuong: parseFloat(form.soLuong), giaMuaTB: parseFloat(form.giaMuaTB), ghiChu: form.ghiChu };
+    const item = { id: editItem?.id || Date.now(), ma: form.ma.toUpperCase(), soLuong: parseFloat(form.soLuong), giaMuaTB: (parseFloat(form.giaMuaTB)||0) * 1000, ghiChu: form.ghiChu };
     if (editItem) setHoldings(holdings.map(h => h.id===editItem.id ? item : h));
     else setHoldings([...holdings, item]);
     setShowModal(false);
@@ -638,7 +641,7 @@ function StockPortfolio({ prices }) {
         <div className="modal-overlay" onClick={()=>setShowModal(false)}>
           <div className="modal-box" onClick={e=>e.stopPropagation()}>
             <h3 style={{color:"#38bdf8",marginBottom:16,fontSize:15}}>{editItem?"Sửa vị thế":"Thêm cổ phiếu"}</h3>
-            {[{l:"Mã cổ phiếu",k:"ma",p:"VD: ACB"},{l:"Số lượng (cp)",k:"soLuong",p:"VD: 1000"},{l:"Giá mua TB (đ/cp)",k:"giaMuaTB",p:"VD: 35000"},{l:"Ghi chú",k:"ghiChu",p:"Tuỳ chọn"}].map(f => (
+            {[{l:"Mã cổ phiếu",k:"ma",p:"VD: ACB"},{l:"Số lượng (cp)",k:"soLuong",p:"VD: 1000"},{l:"Giá mua TB (×1000 đ/cp)",k:"giaMuaTB",p:"VD: 35"},{l:"Ghi chú",k:"ghiChu",p:"Tuỳ chọn"}].map(f => (
               <div key={f.k} style={{marginBottom:12}}>
                 <label style={labelS}>{f.l}</label>
                 <input style={inputS} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p} type={f.k==="ma"||f.k==="ghiChu"?"text":"number"}/>
@@ -1355,6 +1358,7 @@ function TodoTab() {
   ];
   const [todos, setTodos] = useLS("azfin_todos", {});
   const [inputs, setInputs] = React.useState({day:"",week:"",month:"",year:""});
+  const [subTab, setSubTab] = useState("todo");
 
   const addTodo = (period) => {
     const text = inputs[period].trim();
@@ -1367,72 +1371,1795 @@ function TodoTab() {
   const deleteTodo = (period, id) =>
     setTodos(prev => ({ ...prev, [period]: (prev[period]||[]).filter(t => t.id!==id) }));
 
+  // ── Calendar events ──
+  const [events, setEvents] = useLS("azfin_calendar_events", []);
+  const [showEvtModal, setShowEvtModal] = useState(false);
+  const [editEvt, setEditEvt] = useState(null);
+  const [showPast, setShowPast] = useState(false);
+  const todayStr = new Date().toISOString().slice(0,10);
+  const emptyEvt = {tieuDe:"",ngay:todayStr,gio:"",danhMuc:"khac",ghiChu:""};
+  const [evtForm, setEvtForm] = useState(emptyEvt);
+
+  const CAT_EVT = [
+    {id:"duLich",    l:"✈️ Du lịch",       c:"#06b6d4"},
+    {id:"sinhNhat",  l:"🎂 Sinh nhật",      c:"#ec4899"},
+    {id:"congViec",  l:"💼 Công việc",       c:"#3b82f6"},
+    {id:"sucKhoe",   l:"💊 Sức khỏe",       c:"#22c55e"},
+    {id:"taiChinh",  l:"💰 Tài chính",      c:"#fbbf24"},
+    {id:"giadinh",   l:"👨‍👩‍👧 Gia đình",  c:"#f87171"},
+    {id:"khac",      l:"📌 Khác",           c:"#94a3b8"},
+  ];
+  const getCat = id => CAT_EVT.find(c=>c.id===id) || CAT_EVT[6];
+
+  const diffDays = (ngay) => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const d = new Date(ngay); d.setHours(0,0,0,0);
+    return Math.round((d-today)/86400000);
+  };
+  const fDate = (ngay) => {
+    const d = new Date(ngay);
+    return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+  };
+  const fDow = (ngay) => ["CN","T2","T3","T4","T5","T6","T7"][new Date(ngay).getDay()];
+  const countdownBadge = (diff) => {
+    if (diff < 0)  return {l:`${Math.abs(diff)} ngày trước`, c:"#475569", bg:"#0f172a"};
+    if (diff === 0) return {l:"Hôm nay!", c:"#000",     bg:"#fbbf24"};
+    if (diff === 1) return {l:"Ngày mai", c:"#fbbf24",  bg:"#431407"};
+    if (diff <= 7)  return {l:`Còn ${diff} ngày`, c:"#fb923c", bg:"#431407"};
+    if (diff <= 30) return {l:`Còn ${diff} ngày`, c:"#38bdf8", bg:"#0c2340"};
+    return {l:`Còn ${diff} ngày`, c:"#64748b", bg:"#0f172a"};
+  };
+
+  const openAddEvt  = () => { setEditEvt(null); setEvtForm(emptyEvt); setShowEvtModal(true); };
+  const openEditEvt = e => { setEditEvt(e); setEvtForm({...e}); setShowEvtModal(true); };
+  const saveEvt = () => {
+    if (!evtForm.tieuDe || !evtForm.ngay) return;
+    const item = {id:editEvt?.id||Date.now(), tieuDe:evtForm.tieuDe.trim(), ngay:evtForm.ngay, gio:evtForm.gio, danhMuc:evtForm.danhMuc, ghiChu:evtForm.ghiChu.trim()};
+    if (editEvt) setEvents(events.map(e=>e.id===editEvt.id?item:e));
+    else setEvents([...events, item]);
+    setShowEvtModal(false);
+  };
+  const delEvt = id => setEvents(events.filter(e=>e.id!==id));
+
+  const sorted = useMemo(() => [...events].sort((a,b)=>a.ngay.localeCompare(b.ngay)||a.gio.localeCompare(b.gio)), [events]);
+  const futureEvts = sorted.filter(e => diffDays(e.ngay) >= 0);
+  const pastEvts   = sorted.filter(e => diffDays(e.ngay) < 0).reverse();
+
+  const groups = useMemo(() => {
+    const g = {today:[], week:[], month:[], later:[]};
+    futureEvts.forEach(e => {
+      const d = diffDays(e.ngay);
+      if (d === 0) g.today.push(e);
+      else if (d <= 7) g.week.push(e);
+      else if (d <= 30) g.month.push(e);
+      else g.later.push(e);
+    });
+    return g;
+  }, [futureEvts]);
+
+  const renderEvent = (evt) => {
+    const diff = diffDays(evt.ngay);
+    const badge = countdownBadge(diff);
+    const cat = getCat(evt.danhMuc);
+    return (
+      <div key={evt.id} style={{display:"flex",gap:12,padding:"10px 0",borderBottom:"1px solid #0f172a",alignItems:"flex-start"}}>
+        <div style={{flexShrink:0,textAlign:"center",minWidth:44,background:"#0f172a",borderRadius:8,padding:"6px 4px",borderTop:`2px solid ${cat.c}`}}>
+          <div style={{fontSize:10,color:cat.c,fontWeight:700}}>{fDow(evt.ngay)}</div>
+          <div style={{fontSize:18,fontWeight:800,color:"#e2e8f0",lineHeight:1.1}}>{new Date(evt.ngay).getDate()}</div>
+          <div style={{fontSize:9,color:"#475569"}}>{String(new Date(evt.ngay).getMonth()+1).padStart(2,"0")}/{String(new Date(evt.ngay).getFullYear()).slice(2)}</div>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
+            <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{evt.tieuDe}</span>
+            <span style={{fontSize:10,color:cat.c}}>{cat.l}</span>
+          </div>
+          {evt.gio && <div style={{fontSize:11,color:"#64748b"}}>🕐 {evt.gio}</div>}
+          {evt.ghiChu && <div style={{fontSize:11,color:"#475569",marginTop:2}}>{evt.ghiChu}</div>}
+        </div>
+        <div style={{flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+          <span style={{fontSize:10,fontWeight:700,color:badge.c,background:badge.bg,borderRadius:20,padding:"2px 8px",whiteSpace:"nowrap"}}>{badge.l}</span>
+          <div style={{display:"flex",gap:4}}>
+            <button onClick={()=>openEditEvt(evt)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:12}}>✏</button>
+            <button onClick={()=>delEvt(evt.id)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:14}}>×</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const SectionHead = ({label, count, color}) => count === 0 ? null : (
+    <div style={{fontSize:11,fontWeight:700,color,background:"#0f172a",borderRadius:6,padding:"3px 10px",marginTop:14,marginBottom:2,display:"inline-block"}}>{label} · {count}</div>
+  );
+
   return (
     <div>
-      <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
-        <span style={{fontWeight:700,fontSize:16,color:"#38bdf8"}}>📋 Mục tiêu & Công việc</span>
+      <div style={{marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
+        <button onClick={()=>setSubTab("todo")} style={tabS(subTab==="todo","#38bdf8")}>📋 Công việc</button>
+        <button onClick={()=>setSubTab("calendar")} style={tabS(subTab==="calendar","#fb923c")}>📅 Kế hoạch</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-        {PERIODS.map(({key, l, color}) => {
-          const items = todos[key] || [];
-          const doneCount = items.filter(t=>t.done).length;
-          return (
-            <div key={key} style={{background:"#1e293b",borderRadius:10,padding:"14px 16px",
-              borderTop:`3px solid ${color}`}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                <span style={{fontWeight:700,fontSize:13,color}}>{l}</span>
-                {items.length > 0 && (
-                  <span style={{fontSize:10,color:"#475569",background:"#0f172a",
-                    borderRadius:10,padding:"1px 8px"}}>
-                    {doneCount}/{items.length}
-                  </span>
-                )}
-              </div>
-              <div style={{display:"flex",gap:6,marginBottom:10}}>
-                <input value={inputs[key]}
-                  onChange={e => setInputs(prev=>({...prev,[key]:e.target.value}))}
-                  onKeyDown={e => e.key==="Enter" && addTodo(key)}
-                  placeholder="Thêm công việc..."
-                  style={{flex:1,background:"#0f172a",border:"1px solid #334155",borderRadius:6,
-                    padding:"5px 10px",fontSize:12,color:"#e2e8f0",outline:"none"}}
-                />
-                <button onClick={() => addTodo(key)}
-                  style={{background:color,color:"#000",border:"none",borderRadius:6,
-                    padding:"5px 14px",fontSize:16,cursor:"pointer",fontWeight:700,lineHeight:1}}>
-                  +
-                </button>
-              </div>
-              <div>
-                {items.length === 0 && (
-                  <div style={{fontSize:11,color:"#334155",textAlign:"center",padding:"10px 0"}}>
-                    Chưa có công việc
-                  </div>
-                )}
-                {items.map(t => (
-                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,
-                    padding:"6px 0",borderBottom:"1px solid #0f172a"}}>
-                    <div onClick={() => toggleTodo(key,t.id)}
-                      style={{width:16,height:16,borderRadius:4,flexShrink:0,cursor:"pointer",
-                        border:`2px solid ${t.done?color:"#475569"}`,background:t.done?color:"transparent",
-                        display:"flex",alignItems:"center",justifyContent:"center"}}>
-                      {t.done && <span style={{fontSize:10,color:"#000",fontWeight:700,lineHeight:1}}>✓</span>}
+
+      {subTab==="todo" && (
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          {PERIODS.map(({key, l, color}) => {
+            const items = todos[key] || [];
+            const doneCount = items.filter(t=>t.done).length;
+            return (
+              <div key={key} style={{background:"#1e293b",borderRadius:10,padding:"14px 16px",borderTop:`3px solid ${color}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                  <span style={{fontWeight:700,fontSize:13,color}}>{l}</span>
+                  {items.length > 0 && (
+                    <span style={{fontSize:10,color:"#475569",background:"#0f172a",borderRadius:10,padding:"1px 8px"}}>{doneCount}/{items.length}</span>
+                  )}
+                </div>
+                <div style={{display:"flex",gap:6,marginBottom:10}}>
+                  <input value={inputs[key]}
+                    onChange={e => setInputs(prev=>({...prev,[key]:e.target.value}))}
+                    onKeyDown={e => e.key==="Enter" && addTodo(key)}
+                    placeholder="Thêm công việc..."
+                    style={{flex:1,background:"#0f172a",border:"1px solid #334155",borderRadius:6,padding:"5px 10px",fontSize:12,color:"#e2e8f0",outline:"none"}}
+                  />
+                  <button onClick={() => addTodo(key)}
+                    style={{background:color,color:"#000",border:"none",borderRadius:6,padding:"5px 14px",fontSize:16,cursor:"pointer",fontWeight:700,lineHeight:1}}>+</button>
+                </div>
+                <div>
+                  {items.length === 0 && <div style={{fontSize:11,color:"#334155",textAlign:"center",padding:"10px 0"}}>Chưa có công việc</div>}
+                  {items.map(t => (
+                    <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #0f172a"}}>
+                      <div onClick={() => toggleTodo(key,t.id)}
+                        style={{width:16,height:16,borderRadius:4,flexShrink:0,cursor:"pointer",border:`2px solid ${t.done?color:"#475569"}`,background:t.done?color:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        {t.done && <span style={{fontSize:10,color:"#000",fontWeight:700,lineHeight:1}}>✓</span>}
+                      </div>
+                      <span style={{flex:1,fontSize:12,color:t.done?"#475569":"#e2e8f0",textDecoration:t.done?"line-through":"none",wordBreak:"break-word"}}>{t.text}</span>
+                      <button onClick={() => deleteTodo(key,t.id)}
+                        style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:16,padding:"0 2px",lineHeight:1,flexShrink:0}}>×</button>
                     </div>
-                    <span style={{flex:1,fontSize:12,color:t.done?"#475569":"#e2e8f0",
-                      textDecoration:t.done?"line-through":"none",wordBreak:"break-word"}}>
-                      {t.text}
-                    </span>
-                    <button onClick={() => deleteTodo(key,t.id)}
-                      style={{background:"none",border:"none",color:"#475569",cursor:"pointer",
-                        fontSize:16,padding:"0 2px",lineHeight:1,flexShrink:0}}>
-                      ×
-                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {subTab==="calendar" && (
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+            <span style={{fontWeight:700,fontSize:15,color:"#fb923c"}}>📅 Kế hoạch quan trọng</span>
+            <span style={{fontSize:11,color:"#475569",background:"#1e293b",borderRadius:10,padding:"2px 10px"}}>{futureEvts.length} sự kiện sắp tới</span>
+            <button onClick={openAddEvt}
+              style={{marginLeft:"auto",padding:"7px 16px",borderRadius:20,border:"none",background:"linear-gradient(135deg,#fb923c,#f59e0b)",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>
+              + Thêm sự kiện
+            </button>
+          </div>
+
+          {events.length === 0 ? (
+            <div style={{textAlign:"center",padding:"60px 20px",color:"#475569"}}>
+              <div style={{fontSize:40,marginBottom:12}}>📅</div>
+              <div style={{fontSize:14,marginBottom:6}}>Chưa có kế hoạch nào</div>
+              <div style={{fontSize:12}}>Thêm sinh nhật, du lịch, cuộc hẹn quan trọng...</div>
+            </div>
+          ) : (
+            <div style={{background:"#1e293b",borderRadius:12,padding:"16px 20px"}}>
+              {groups.today.length > 0 && (
+                <div>
+                  <SectionHead label="🔴 Hôm nay" count={groups.today.length} color="#fbbf24"/>
+                  {groups.today.map(renderEvent)}
+                </div>
+              )}
+              {groups.week.length > 0 && (
+                <div>
+                  <SectionHead label="🟠 7 ngày tới" count={groups.week.length} color="#fb923c"/>
+                  {groups.week.map(renderEvent)}
+                </div>
+              )}
+              {groups.month.length > 0 && (
+                <div>
+                  <SectionHead label="🔵 Tháng này" count={groups.month.length} color="#38bdf8"/>
+                  {groups.month.map(renderEvent)}
+                </div>
+              )}
+              {groups.later.length > 0 && (
+                <div>
+                  <SectionHead label="⚪ Sau đó" count={groups.later.length} color="#64748b"/>
+                  {groups.later.map(renderEvent)}
+                </div>
+              )}
+
+              {pastEvts.length > 0 && (
+                <div style={{marginTop:16,borderTop:"1px solid #0f172a",paddingTop:12}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",marginBottom:4}} onClick={()=>setShowPast(v=>!v)}>
+                    <span style={{fontSize:11,color:"#334155",fontWeight:600}}>🕓 Đã qua ({pastEvts.length})</span>
+                    <span style={{fontSize:10,color:"#334155"}}>{showPast?"▲":"▼"}</span>
                   </div>
-                ))}
+                  {showPast && pastEvts.map(renderEvent)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {showEvtModal && (
+            <div className="modal-overlay" onClick={()=>setShowEvtModal(false)}>
+              <div className="modal-box" onClick={e=>e.stopPropagation()}>
+                <h3 style={{color:"#fb923c",marginBottom:16,fontSize:15}}>{editEvt?"Sửa sự kiện":"Thêm kế hoạch"}</h3>
+                <div style={{display:"grid",gap:12}}>
+                  <div>
+                    <label style={labelS}>Tiêu đề *</label>
+                    <input style={inputS} placeholder="VD: Du lịch công ty Đà Nẵng" value={evtForm.tieuDe} onChange={e=>setEvtForm({...evtForm,tieuDe:e.target.value})}/>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                    <div>
+                      <label style={labelS}>Ngày *</label>
+                      <input style={inputS} type="date" value={evtForm.ngay} onChange={e=>setEvtForm({...evtForm,ngay:e.target.value})}/>
+                    </div>
+                    <div>
+                      <label style={labelS}>Giờ (tuỳ chọn)</label>
+                      <input style={inputS} type="time" value={evtForm.gio} onChange={e=>setEvtForm({...evtForm,gio:e.target.value})}/>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelS}>Danh mục</label>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {CAT_EVT.map(c=>(
+                        <div key={c.id} onClick={()=>setEvtForm({...evtForm,danhMuc:c.id})}
+                          style={{padding:"4px 10px",borderRadius:20,cursor:"pointer",fontSize:11,fontWeight:600,
+                            background:evtForm.danhMuc===c.id?c.c:"#0f172a",
+                            color:evtForm.danhMuc===c.id?"#000":"#64748b",
+                            border:`1px solid ${evtForm.danhMuc===c.id?c.c:"#334155"}`}}>
+                          {c.l}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelS}>Ghi chú</label>
+                    <input style={inputS} placeholder="VD: Cần mua bánh sinh nhật trước 1 ngày" value={evtForm.ghiChu} onChange={e=>setEvtForm({...evtForm,ghiChu:e.target.value})}/>
+                  </div>
+                  {evtForm.ngay && (
+                    <div style={{background:"#0f172a",borderRadius:8,padding:"8px 12px",fontSize:12}}>
+                      <span style={{color:"#64748b"}}>Còn: </span>
+                      <span style={{color:"#fbbf24",fontWeight:700}}>
+                        {(() => { const d=diffDays(evtForm.ngay); return d===0?"Hôm nay":d<0?`Đã qua ${Math.abs(d)} ngày`:`${d} ngày`; })()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:16}}>
+                  <button onClick={()=>setShowEvtModal(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
+                  <button onClick={saveEvt} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#fb923c,#f59e0b)",color:"#fff",fontWeight:700,cursor:"pointer"}}>{editEvt?"Lưu":"Thêm"}</button>
+                </div>
               </div>
             </div>
-          );
-        })}
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Finance Overview Tab ──────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function FinanceTab({ prices, cryptoPrices, usdvnd }) {
+  const [stockHoldings] = useLS("azfin_stock_holdings", []);
+  const [cryptoHoldings] = useLS("azfin_crypto_holdings",
+    COINS_DEF.reduce((acc,c) => ({...acc,[c.id]:{soLuong:0,giaMuaTB:0,gridProfit:0}}),{}));
+  const [otherInv, setOtherInv] = useLS("azfin_other_investments", []);
+  const [cards]         = useLS("azfin_credit_cards", []);
+  const [loans]         = useLS("azfin_loans", []);
+  const [fixedExpenses] = useLS("azfin_fixed_expenses", []);
+  const [transactions]  = useLS("azfin_transactions", []);
+  const [monthlyIncome] = useLS("azfin_monthly_income", {});
+  const [monthlyInvest, setMonthlyInvest] = useLS("azfin_monthly_invest_target", 0);
+  const [showModal, setShowModal] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const emptyForm = {ten:"",loai:"tietKiem",soTien:"",giaTriHT:"",ngayDauTu:"",ghiChu:""};
+  const [form, setForm] = useState(emptyForm);
+
+  const LOAI_OTHER = [
+    {id:"tietKiem",   l:"🏦 Tiết kiệm", c:"#22c55e"},
+    {id:"vang",       l:"🪙 Vàng",      c:"#fbbf24"},
+    {id:"batDongSan", l:"🏠 Bất động sản", c:"#f59e0b"},
+    {id:"traiBieu",   l:"📊 Trái phiếu", c:"#a78bfa"},
+    {id:"khac",       l:"📦 Khác",       c:"#64748b"},
+  ];
+  const getLoai = id => LOAI_OTHER.find(l=>l.id===id) || LOAI_OTHER[4];
+
+  // ── Stock calculations (VND) ──
+  const stockRows = useMemo(() => stockHoldings.map(h => {
+    const giaHT = prices[h.ma]?.lastPrice || null;
+    const vonVND = h.soLuong * h.giaMuaTB;
+    const htVND  = giaHT ? h.soLuong * giaHT : vonVND;
+    return { ...h, vonVND, htVND, pnlVND: htVND - vonVND, hasPrice: !!giaHT };
+  }), [stockHoldings, prices]);
+  const stockVon = stockRows.reduce((s,r)=>s+r.vonVND,0);
+  const stockHT  = stockRows.reduce((s,r)=>s+r.htVND,0);
+  const stockPnl = stockHT - stockVon;
+
+  // ── Crypto calculations (converted to VND) ──
+  const cryptoRows = useMemo(() => COINS_DEF.map(c => {
+    const h = cryptoHoldings[c.id] || {soLuong:0,giaMuaTB:0,gridProfit:0};
+    const priceUSD = cryptoPrices[c.binSym]?.price || 0;
+    const vonUSD = h.soLuong * h.giaMuaTB;
+    const htUSD  = h.soLuong * priceUSD;
+    const vonVND = vonUSD * usdvnd;
+    const htVND  = priceUSD ? htUSD * usdvnd : vonVND;
+    const gridVND = (h.gridProfit||0) * usdvnd;
+    return { ...c, h, priceUSD, vonUSD, htUSD, vonVND, htVND, gridVND, hasPrice: !!priceUSD };
+  }).filter(r => r.h.soLuong > 0 || r.h.gridProfit > 0), [cryptoHoldings, cryptoPrices, usdvnd]);
+  const cryptoVon = cryptoRows.reduce((s,r)=>s+r.vonVND,0);
+  const cryptoHT  = cryptoRows.reduce((s,r)=>s+r.htVND+r.gridVND,0);
+  const cryptoPnl = cryptoHT - cryptoVon;
+
+  // ── Other investments ──
+  const otherVon = otherInv.reduce((s,r)=>s+r.soTien,0);
+  const otherHT  = otherInv.reduce((s,r)=>s+(r.giaTriHT||r.soTien),0);
+  const otherPnl = otherHT - otherVon;
+
+  // ── Totals ──
+  const totalVon = stockVon + cryptoVon + otherVon;
+  const totalHT  = stockHT  + cryptoHT  + otherHT;
+  const totalPnl = totalHT  - totalVon;
+  const totalPct = totalVon > 0 ? (totalPnl/totalVon*100) : 0;
+
+  // ── Donut chart: phân bổ giá trị hiện tại ──
+  const donutSegs = [
+    { label:"📈 Cổ phiếu",  value: stockHT,  color:"#3b82f6" },
+    { label:"🪙 Crypto",     value: cryptoHT, color:"#f59e0b" },
+    { label:"💰 Tài sản khác",value: otherHT, color:"#22c55e" },
+  ].filter(s=>s.value>0);
+
+  const fM = n => n>=1e9?(n/1e9).toFixed(2)+"tỷ":n>=1e6?(n/1e6).toFixed(1)+"tr":fNum(Math.round(n));
+  const signStr = n => (n>=0?"+":"")+fM(n)+"đ";
+  const signPct = p => (p>=0?"+":"")+Math.abs(p).toFixed(1)+"%";
+
+  // ── Modal save ──
+  const save = () => {
+    if (!form.ten || !form.soTien) return;
+    const item = {
+      id: editItem?.id||Date.now(), ten:form.ten.trim(), loai:form.loai,
+      soTien:parseFloat(form.soTien)||0, giaTriHT:parseFloat(form.giaTriHT)||parseFloat(form.soTien)||0,
+      ngayDauTu:form.ngayDauTu, ghiChu:form.ghiChu.trim(),
+    };
+    if (editItem) setOtherInv(otherInv.map(x=>x.id===editItem.id?item:x));
+    else setOtherInv([...otherInv, item]);
+    setShowModal(false);
+  };
+  const openAdd  = () => { setEditItem(null); setForm(emptyForm); setShowModal(true); };
+  const openEdit = x  => { setEditItem(x); setForm({...x,soTien:String(x.soTien),giaTriHT:String(x.giaTriHT||x.soTien)}); setShowModal(true); };
+  const del = id => setOtherInv(otherInv.filter(x=>x.id!==id));
+
+  // ── Monthly personal finance calculations ──
+  const mk2 = (() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; })();
+  const calcEMILocal = (P,ls,n) => { if(!P||!n) return 0; const r=ls/100/12; return r===0?P/n:P*r*Math.pow(1+r,n)/(Math.pow(1+r,n)-1); };
+  const luong2        = monthlyIncome[mk2] || 0;
+  const thuKhac2      = transactions.filter(t=>t.loai==="thu"&&t.ngay?.startsWith(mk2)).reduce((s,t)=>s+t.soTien,0);
+  const tongThu2      = luong2 + thuKhac2;
+  const chiFixed2     = fixedExpenses.reduce((s,e)=>s+e.soTien,0);
+  const chiPhatSinh2  = transactions.filter(t=>t.loai==="chi"&&t.ngay?.startsWith(mk2)).reduce((s,t)=>s+t.soTien,0);
+  const tongChiTieu2  = chiFixed2 + chiPhatSinh2;
+  const activeLoans2  = loans.filter(l=>l.kyDaTra<l.soKy);
+  const tongTraVay2   = activeLoans2.reduce((s,l)=>s+(l.soTienTraHangThang||calcEMILocal(l.soTienVay,l.laiSuat,l.soKy)),0);
+  const tongNoThe2    = cards.reduce((s,c)=>s+(c.duNo||0),0);
+  const tongPhaiChi2  = tongNoThe2 + tongTraVay2 + (monthlyInvest||0) + tongChiTieu2;
+  const conLai2       = tongThu2 - tongPhaiChi2;
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{marginBottom:16}}>
+        <span style={{fontWeight:700,fontSize:16,color:"#38bdf8"}}>📊 Tổng quan tài chính</span>
       </div>
+
+      {/* ── Monthly personal finance section ── */}
+      {(() => {
+        const now2 = new Date();
+        const monthLabel2 = `Tháng ${now2.getMonth()+1}/${now2.getFullYear()}`;
+        const maxBar = Math.max(tongThu2, tongPhaiChi2, 1);
+        const barSegs = [
+          {label:"Nợ thẻ",  val:tongNoThe2,        color:"#ef4444"},
+          {label:"Trả vay", val:tongTraVay2,        color:"#f59e0b"},
+          {label:"Đầu tư",  val:monthlyInvest||0,   color:"#3b82f6"},
+          {label:"Chi tiêu",val:tongChiTieu2,       color:"#22c55e"},
+        ];
+        return (
+          <div style={{background:"#1e293b",borderRadius:12,padding:16,marginBottom:20,border:"1px solid #334155"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#38bdf8",marginBottom:12}}>📅 {monthLabel2} — Tài chính cá nhân</div>
+
+            {/* 3-col stat cards */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:16}}>
+              {[
+                {l:"Tổng thu",   v:fM(tongThu2)+"đ",   c:"#4ade80"},
+                {l:"Phải chi",   v:fM(tongPhaiChi2)+"đ", c:"#f87171"},
+                {l:"Còn lại",    v:(conLai2>=0?"+":"")+fM(Math.abs(conLai2))+"đ", c:conLai2>=0?"#4ade80":"#f87171"},
+              ].map(({l,v,c}) => (
+                <div key={l} style={{background:"#0f172a",borderRadius:10,padding:"10px 12px",borderTop:`2px solid ${c}`}}>
+                  <div style={{fontSize:10,color:"#475569",marginBottom:3}}>{l}</div>
+                  <div style={{fontWeight:700,fontSize:14,color:c}}>{v}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Two-column breakdown */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+              {/* Thu nhập */}
+              <div>
+                <div style={{fontSize:11,color:"#64748b",fontWeight:600,marginBottom:8}}>Thu nhập</div>
+                {[
+                  {icon:"💰",label:"Lương",     val:luong2},
+                  {icon:"💵",label:"Thu khác",  val:thuKhac2},
+                ].map(({icon,label,val}) => (
+                  <div key={label} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #0f172a"}}>
+                    <span style={{fontSize:12,color:"#94a3b8"}}>{icon} {label}</span>
+                    <span style={{fontSize:12,fontWeight:600,color:"#4ade80"}}>{fM(val)}đ</span>
+                  </div>
+                ))}
+                <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",marginTop:4}}>
+                  <span style={{fontSize:11,color:"#64748b",fontWeight:600}}>Tổng</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#4ade80"}}>{fM(tongThu2)}đ</span>
+                </div>
+              </div>
+              {/* Chi hàng tháng */}
+              <div>
+                <div style={{fontSize:11,color:"#64748b",fontWeight:600,marginBottom:8}}>Chi hàng tháng</div>
+                {[
+                  {icon:"💳",label:"Nợ thẻ",   val:tongNoThe2,        editable:false},
+                  {icon:"🏦",label:"Trả vay",  val:tongTraVay2,        editable:false},
+                  {icon:"📈",label:"Đầu tư",   val:monthlyInvest||0,   editable:true},
+                  {icon:"🛒",label:"Chi tiêu", val:tongChiTieu2,       editable:false},
+                ].map(({icon,label,val,editable}) => (
+                  <div key={label} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #0f172a"}}>
+                    <span style={{fontSize:12,color:"#94a3b8"}}>{icon} {label}</span>
+                    {editable ? (
+                      <input type="number" value={monthlyInvest||""} onChange={e=>setMonthlyInvest(parseFloat(e.target.value)||0)} placeholder="0"
+                        style={{width:90,padding:"2px 6px",borderRadius:5,border:"1px solid #334155",background:"#0f172a",color:"#3b82f6",fontSize:12,fontWeight:600,textAlign:"right",outline:"none"}}/>
+                    ) : (
+                      <span style={{fontSize:12,fontWeight:600,color:"#f87171"}}>{fM(val)}đ</span>
+                    )}
+                  </div>
+                ))}
+                <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",marginTop:4}}>
+                  <span style={{fontSize:11,color:"#64748b",fontWeight:600}}>Tổng</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#f87171"}}>{fM(tongPhaiChi2)}đ</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bar chart Thu / Chi */}
+            <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>Biểu đồ Thu / Chi</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <div style={{width:28,fontSize:10,color:"#4ade80",fontWeight:700,flexShrink:0}}>THU</div>
+              <div style={{flex:1,background:"#0f172a",borderRadius:4,height:16,overflow:"hidden"}}>
+                <div style={{width:`${Math.min(tongThu2/maxBar*100,100)}%`,height:"100%",background:"#4ade80",borderRadius:4,minWidth:tongThu2>0?2:0}}/>
+              </div>
+              <div style={{width:64,fontSize:11,color:"#4ade80",fontWeight:700,textAlign:"right",flexShrink:0}}>{fM(tongThu2)}đ</div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+              <div style={{width:28,fontSize:10,color:"#f87171",fontWeight:700,flexShrink:0}}>CHI</div>
+              <div style={{flex:1,background:"#0f172a",borderRadius:4,height:16,overflow:"hidden",display:"flex"}}>
+                {barSegs.filter(s=>s.val>0).map(s => (
+                  <div key={s.label} title={`${s.label}: ${fM(s.val)}đ`}
+                    style={{width:`${s.val/maxBar*100}%`,height:"100%",background:s.color,minWidth:2}}/>
+                ))}
+              </div>
+              <div style={{width:64,fontSize:11,color:"#f87171",fontWeight:700,textAlign:"right",flexShrink:0}}>{fM(tongPhaiChi2)}đ</div>
+            </div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+              {barSegs.map(s => (
+                <div key={s.label} style={{display:"flex",alignItems:"center",gap:4,fontSize:10}}>
+                  <div style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/>
+                  <span style={{color:"#64748b"}}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Summary strip */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+        {[
+          {l:"Tổng giá trị HT",  v:fM(totalHT)+"đ",     c:"#38bdf8"},
+          {l:"Tổng vốn đầu tư",  v:fM(totalVon)+"đ",    c:"#94a3b8"},
+          {l:"Lãi / Lỗ",         v:signStr(totalPnl),   c:pctColor(totalPnl)},
+          {l:"Tỷ suất",          v:signPct(totalPct),   c:pctColor(totalPct)},
+        ].map(({l,v,c}) => (
+          <div key={l} style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",borderTop:`3px solid ${c}`}}>
+            <div style={{fontSize:10,color:"#475569",marginBottom:4}}>{l}</div>
+            <div style={{fontWeight:700,fontSize:15,color:c}}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Donut + legend */}
+      {totalHT > 0 && (
+        <div style={{background:"#1e293b",borderRadius:12,padding:16,marginBottom:16,display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{flex:"0 0 auto"}}>
+            <div style={{fontSize:11,color:"#64748b",marginBottom:8,textAlign:"center"}}>Phân bổ tài sản</div>
+            <DonutChart segments={donutSegs} size={150}
+              centerText={["Tổng HT", fM(totalHT)]}/>
+          </div>
+          <div style={{flex:1,minWidth:160}}>
+            {donutSegs.map(s => {
+              const pct = totalHT>0?(s.value/totalHT*100):0;
+              return (
+                <div key={s.label} style={{marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:12,color:"#94a3b8"}}>{s.label}</span>
+                    <span style={{fontSize:12,fontWeight:600,color:s.color}}>{pct.toFixed(1)}% · {fM(s.value)}đ</span>
+                  </div>
+                  <div style={{height:5,background:"#0f172a",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{width:`${pct}%`,height:"100%",background:s.color,borderRadius:3}}/>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Cổ phiếu section ── */}
+      <div style={{background:"#1e293b",borderRadius:10,padding:"14px 16px",marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:stockRows.length>0?12:0}}>
+          <span style={{fontWeight:700,fontSize:13,color:"#3b82f6"}}>📈 Cổ phiếu</span>
+          {stockVon > 0 && (
+            <span style={{fontSize:11,background:"#0f172a",borderRadius:10,padding:"1px 8px",
+              color:pctColor(stockPnl)}}>
+              {fM(stockHT)}đ · {signStr(stockPnl)}
+            </span>
+          )}
+          <span style={{marginLeft:"auto",fontSize:11,color:"#475569",cursor:"pointer"}}
+            onClick={()=>{}}>→ Tab Cổ phiếu</span>
+        </div>
+        {stockRows.length === 0 ? (
+          <div style={{fontSize:12,color:"#334155",textAlign:"center",padding:"10px 0"}}>Chưa có cổ phiếu — thêm tại tab 📈 Cổ phiếu</div>
+        ) : (
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead>
+                <tr style={{background:"#0f172a",color:"#64748b",fontSize:11}}>
+                  {["Mã","Số CP","Vốn (đ)","Giá trị HT","Lãi/Lỗ","Tỷ suất"].map(h=>(
+                    <th key={h} style={{padding:"7px 10px",textAlign:"right",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {stockRows.map((r,i) => (
+                  <tr key={r.id} style={{background:i%2===0?"#0a0f1e":"#0d1526"}}>
+                    <td style={{padding:"7px 10px",color:"#38bdf8",fontWeight:700}}>{r.ma}</td>
+                    <td style={{padding:"7px 10px",color:"#94a3b8",textAlign:"right"}}>{fNum(r.soLuong)}</td>
+                    <td style={{padding:"7px 10px",color:"#94a3b8",textAlign:"right"}}>{fM(r.vonVND)}</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",color:r.hasPrice?"#e2e8f0":"#475569"}}>
+                      {r.hasPrice ? fM(r.htVND) : "—"}
+                    </td>
+                    <td style={{padding:"7px 10px",textAlign:"right",color:r.hasPrice?pctColor(r.pnlVND):"#475569"}}>
+                      {r.hasPrice ? (r.pnlVND>=0?"+":"")+fM(r.pnlVND) : "—"}
+                    </td>
+                    <td style={{padding:"7px 10px",textAlign:"right",color:r.hasPrice?pctColor(r.pnlVND):"#475569"}}>
+                      {r.hasPrice ? (r.pnlVND>=0?"+":""+(r.pnlVND/r.vonVND*100).toFixed(1)+"%") : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Crypto section ── */}
+      <div style={{background:"#1e293b",borderRadius:10,padding:"14px 16px",marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:cryptoRows.length>0?12:0}}>
+          <span style={{fontWeight:700,fontSize:13,color:"#f59e0b"}}>🪙 Crypto</span>
+          {cryptoVon > 0 && (
+            <span style={{fontSize:11,background:"#0f172a",borderRadius:10,padding:"1px 8px",color:pctColor(cryptoPnl)}}>
+              {fM(cryptoHT)}đ · {signStr(cryptoPnl)}
+            </span>
+          )}
+          <span style={{marginLeft:"auto",fontSize:11,color:"#475569"}}>→ Tab Crypto</span>
+        </div>
+        {cryptoRows.length === 0 ? (
+          <div style={{fontSize:12,color:"#334155",textAlign:"center",padding:"10px 0"}}>Chưa có crypto — thêm tại tab 🪙 Crypto</div>
+        ) : (
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead>
+                <tr style={{background:"#0f172a",color:"#64748b",fontSize:11}}>
+                  {["Coin","Số lượng","Vốn (USD)","Giá HT","Giá trị HT (đ)","Lãi/Lỗ (đ)"].map(h=>(
+                    <th key={h} style={{padding:"7px 10px",textAlign:"right",fontWeight:600,whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {cryptoRows.map((r,i) => (
+                  <tr key={r.id} style={{background:i%2===0?"#0a0f1e":"#0d1526"}}>
+                    <td style={{padding:"7px 10px",fontWeight:700,color:r.color}}>{r.icon} {r.id}</td>
+                    <td style={{padding:"7px 10px",color:"#94a3b8",textAlign:"right"}}>{r.h.soLuong||"—"}</td>
+                    <td style={{padding:"7px 10px",color:"#94a3b8",textAlign:"right"}}>{r.h.giaMuaTB?fUSD(r.vonUSD):"—"}</td>
+                    <td style={{padding:"7px 10px",color:"#e2e8f0",textAlign:"right"}}>{r.hasPrice?fUSD(r.priceUSD):"—"}</td>
+                    <td style={{padding:"7px 10px",textAlign:"right",color:r.hasPrice?"#e2e8f0":"#475569"}}>
+                      {r.hasPrice ? fM(r.htVND + r.gridVND) : "—"}
+                    </td>
+                    <td style={{padding:"7px 10px",textAlign:"right",color:r.hasPrice?pctColor(r.htVND+r.gridVND-r.vonVND):"#475569"}}>
+                      {r.hasPrice ? signStr(r.htVND+r.gridVND-r.vonVND) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Other investments section ── */}
+      <div style={{background:"#1e293b",borderRadius:10,padding:"14px 16px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:otherInv.length>0||true?8:0}}>
+          <span style={{fontWeight:700,fontSize:13,color:"#22c55e"}}>💰 Tài sản khác</span>
+          {otherVon > 0 && (
+            <span style={{fontSize:11,background:"#0f172a",borderRadius:10,padding:"1px 8px",color:pctColor(otherPnl)}}>
+              {fM(otherHT)}đ · {signStr(otherPnl)}
+            </span>
+          )}
+          <button onClick={openAdd}
+            style={{marginLeft:"auto",background:"#22c55e",border:"none",borderRadius:6,padding:"3px 12px",cursor:"pointer",fontSize:12,color:"#000",fontWeight:700}}>
+            + Thêm
+          </button>
+        </div>
+
+        {/* Group by type */}
+        {otherInv.length === 0 ? (
+          <div style={{fontSize:12,color:"#334155",textAlign:"center",padding:"10px 0"}}>
+            Thêm tiết kiệm, vàng, bất động sản, trái phiếu...
+          </div>
+        ) : (
+          <div>
+            {LOAI_OTHER.map(loai => {
+              const items = otherInv.filter(x=>x.loai===loai.id);
+              if (items.length === 0) return null;
+              const groupVon = items.reduce((s,x)=>s+x.soTien,0);
+              const groupHT  = items.reduce((s,x)=>s+(x.giaTriHT||x.soTien),0);
+              const groupPnl = groupHT - groupVon;
+              return (
+                <div key={loai.id} style={{marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #0f172a",marginBottom:4}}>
+                    <span style={{fontSize:12,color:loai.c,fontWeight:600}}>{loai.l}</span>
+                    <span style={{fontSize:11,color:"#475569"}}>{fM(groupHT)}đ</span>
+                    <span style={{fontSize:11,color:pctColor(groupPnl),marginLeft:4}}>{groupPnl>=0?"+":""}{fM(groupPnl)}đ</span>
+                  </div>
+                  {items.map(x => {
+                    const ht = x.giaTriHT||x.soTien;
+                    const pnl = ht - x.soTien;
+                    const pnlPct = x.soTien>0?(pnl/x.soTien*100):0;
+                    return (
+                      <div key={x.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0 7px 12px",borderBottom:"1px solid #0a0f1e"}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:12,color:"#e2e8f0"}}>{x.ten}</div>
+                          {x.ghiChu && <div style={{fontSize:10,color:"#475569"}}>{x.ghiChu}</div>}
+                          {x.ngayDauTu && <div style={{fontSize:10,color:"#334155"}}>Từ {x.ngayDauTu}</div>}
+                        </div>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:12,color:"#94a3b8"}}>Vốn: {fM(x.soTien)}đ</div>
+                          <div style={{fontSize:12,color:pctColor(pnl),fontWeight:600}}>
+                            HT: {fM(ht)}đ <span style={{fontSize:10}}>({pnlPct>=0?"+":""}{pnlPct.toFixed(1)}%)</span>
+                          </div>
+                        </div>
+                        <button onClick={()=>openEdit(x)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:13,padding:"0 2px"}}>✏</button>
+                        <button onClick={()=>del(x.id)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:16,padding:"0 2px"}}>×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="modal-overlay" onClick={()=>setShowModal(false)}>
+          <div className="modal-box" onClick={e=>e.stopPropagation()}>
+            <h3 style={{color:"#22c55e",marginBottom:16,fontSize:15}}>{editItem?"Sửa tài sản":"Thêm tài sản"}</h3>
+            <div style={{display:"grid",gap:12}}>
+              <div>
+                <label style={labelS}>Tên tài sản *</label>
+                <input style={inputS} placeholder="VD: Tiết kiệm VCB 12T, Vàng SJC 5 chỉ..." value={form.ten} onChange={e=>setForm({...form,ten:e.target.value})}/>
+              </div>
+              <div>
+                <label style={labelS}>Loại tài sản</label>
+                <select style={inputS} value={form.loai} onChange={e=>setForm({...form,loai:e.target.value})}>
+                  {LOAI_OTHER.map(l=><option key={l.id} value={l.id}>{l.l}</option>)}
+                </select>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <label style={labelS}>Vốn đầu tư (đ) *</label>
+                  <input style={inputS} type="number" placeholder="50000000" value={form.soTien} onChange={e=>setForm({...form,soTien:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={labelS}>Giá trị hiện tại (đ)</label>
+                  <input style={inputS} type="number" placeholder="Bằng vốn nếu không đổi" value={form.giaTriHT} onChange={e=>setForm({...form,giaTriHT:e.target.value})}/>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <label style={labelS}>Ngày đầu tư</label>
+                  <input style={inputS} type="date" value={form.ngayDauTu} onChange={e=>setForm({...form,ngayDauTu:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={labelS}>Ghi chú</label>
+                  <input style={inputS} placeholder="VD: Lãi 5.5%/năm" value={form.ghiChu} onChange={e=>setForm({...form,ghiChu:e.target.value})}/>
+                </div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:16}}>
+              <button onClick={()=>setShowModal(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
+              <button onClick={save} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#22c55e,#06b6d4)",color:"#fff",fontWeight:700,cursor:"pointer"}}>{editItem?"Lưu":"Thêm"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Credit Card Tab ───────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function CreditCardTab() {
+  const [cards, setCards] = useLS("azfin_credit_cards", []);
+  const [installments, setInstallments] = useLS("azfin_installments", []);
+  const [showModal, setShowModal] = useState(false);
+  const [showInstModal, setShowInstModal] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [editInst, setEditInst] = useState(null);
+  const [instCardId, setInstCardId] = useState(null);
+  const [expandedCard, setExpandedCard] = useState(null);
+  const emptyForm = {ten:"",nganHang:"",mauSac:"#3b82f6",hanMuc:"",duNo:"",ngaySaoKe:"",ngayThanhToan:"",thanhToanToiThieu:""};
+  const emptyInstForm = {ten:"",soTienGoc:"",soKy:"",kyDaTra:"0",ngayBatDau:""};
+  const [form, setForm] = useState(emptyForm);
+  const [instForm, setInstForm] = useState(emptyInstForm);
+
+  const getStatementPeriod = (ngaySaoKe) => {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth()+1;
+    if (now.getDate() >= ngaySaoKe) return `${y}-${String(m).padStart(2,"0")}`;
+    const pm = m === 1 ? {y:y-1, m:12} : {y, m:m-1};
+    return `${pm.y}-${String(pm.m).padStart(2,"0")}`;
+  };
+  const isPaid = (card) => card.paidPeriod === getStatementPeriod(card.ngaySaoKe||1);
+  const togglePaid = (card) => {
+    const period = getStatementPeriod(card.ngaySaoKe||1);
+    setCards(cards.map(c => c.id===card.id ? {...c, paidPeriod: isPaid(card)?null:period} : c));
+  };
+
+  const openAdd = () => { setEditItem(null); setForm(emptyForm); setShowModal(true); };
+  const openEdit = c => { setEditItem(c); setForm({...c, hanMuc:String(c.hanMuc), duNo:String(c.duNo), ngaySaoKe:String(c.ngaySaoKe), ngayThanhToan:String(c.ngayThanhToan), thanhToanToiThieu:String(c.thanhToanToiThieu||0)}); setShowModal(true); };
+  const save = () => {
+    if (!form.ten || !form.hanMuc || !form.ngayThanhToan) return;
+    const item = {
+      id: editItem?.id || Date.now(),
+      ten: form.ten.trim(), nganHang: form.nganHang.trim(), mauSac: form.mauSac,
+      hanMuc: parseFloat(form.hanMuc), duNo: parseFloat(form.duNo)||0,
+      ngaySaoKe: parseInt(form.ngaySaoKe)||1, ngayThanhToan: parseInt(form.ngayThanhToan)||25,
+      thanhToanToiThieu: parseFloat(form.thanhToanToiThieu)||0,
+      paidPeriod: editItem?.paidPeriod||null,
+    };
+    if (editItem) setCards(cards.map(c => c.id===editItem.id ? item : c));
+    else setCards([...cards, item]);
+    setShowModal(false);
+  };
+  const deleteCard = id => { setCards(cards.filter(c => c.id !== id)); setInstallments(installments.filter(x => x.cardId !== id)); };
+
+  const openAddInst = (cardId) => { setInstCardId(cardId); setEditInst(null); setInstForm(emptyInstForm); setShowInstModal(true); };
+  const openEditInst = (inst) => { setInstCardId(inst.cardId); setEditInst(inst); setInstForm({...inst,soTienGoc:String(inst.soTienGoc),soKy:String(inst.soKy),kyDaTra:String(inst.kyDaTra)}); setShowInstModal(true); };
+  const saveInst = () => {
+    if (!instForm.ten || !instForm.soTienGoc || !instForm.soKy) return;
+    const item = {id:editInst?.id||Date.now(), cardId:instCardId, ten:instForm.ten.trim(), soTienGoc:parseFloat(instForm.soTienGoc)||0, soKy:parseInt(instForm.soKy)||1, kyDaTra:parseInt(instForm.kyDaTra)||0, ngayBatDau:instForm.ngayBatDau};
+    if (editInst) setInstallments(installments.map(x=>x.id===editInst.id?item:x));
+    else setInstallments([...installments, item]);
+    setShowInstModal(false);
+  };
+  const deleteInst = id => setInstallments(installments.filter(x=>x.id!==id));
+
+  const daysUntilDue = (ngayThanhToan) => {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth();
+    let due = new Date(y, m, ngayThanhToan);
+    if (due <= now) due = new Date(y, m+1, ngayThanhToan);
+    return Math.ceil((due - now) / 86400000);
+  };
+
+  const fVND = n => n >= 1e9 ? (n/1e9).toFixed(1)+"tỷ" : n >= 1e6 ? (n/1e6).toFixed(1)+"tr" : n.toLocaleString("vi-VN")+"đ";
+  const totalLimit = cards.reduce((s,c) => s+c.hanMuc, 0);
+  const totalDebt  = cards.reduce((s,c) => s+c.duNo, 0);
+  const tiLeTong   = totalLimit > 0 ? totalDebt/totalLimit*100 : 0;
+  const COLORS = ["#3b82f6","#a855f7","#ec4899","#f59e0b","#10b981","#06b6d4","#ef4444","#64748b"];
+  const unpaidCards = cards.filter(c=>!isPaid(c)).sort((a,b)=>daysUntilDue(a.ngayThanhToan)-daysUntilDue(b.ngayThanhToan));
+  const paidCards   = cards.filter(c=>isPaid(c));
+
+  const renderCard = (card) => {
+    const tiLe = card.hanMuc > 0 ? card.duNo/card.hanMuc*100 : 0;
+    const barC = tiLe>70?"#f87171":tiLe>30?"#fbbf24":"#4ade80";
+    const days = daysUntilDue(card.ngayThanhToan);
+    const urgent = days <= 7;
+    const paid = isPaid(card);
+    const khaDung = card.hanMuc - card.duNo;
+    const cardInsts = installments.filter(x=>x.cardId===card.id);
+    const totalInstRemaining = cardInsts.reduce((s,x)=>s+(x.soKy-x.kyDaTra)*(x.soTienGoc/x.soKy),0);
+    const isExpanded = expandedCard === card.id;
+    return (
+      <div key={card.id} style={{background:"#1e293b",borderRadius:12,padding:"16px 20px",borderLeft:`4px solid ${paid?"#334155":card.mauSac}`,opacity:paid?0.75:1}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:10}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:14,color:paid?"#64748b":"#e2e8f0"}}>{card.ten}</div>
+            {card.nganHang && <div style={{fontSize:11,color:"#475569",marginTop:2}}>{card.nganHang}</div>}
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+            <button onClick={()=>togglePaid(card)}
+              style={{background:paid?"#166534":"#0f172a",border:`1px solid ${paid?"#4ade80":"#334155"}`,color:paid?"#4ade80":"#64748b",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>
+              {paid?"✓ Đã thanh toán":"Đánh dấu đã TT"}
+            </button>
+            <button onClick={()=>openEdit(card)} style={{background:"#0f172a",border:"1px solid #334155",color:"#94a3b8",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11}}>Sửa</button>
+            <button onClick={()=>deleteCard(card.id)} style={{background:"#0f172a",border:"1px solid #334155",color:"#f87171",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11}}>Xóa</button>
+          </div>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+            <span style={{fontSize:11,color:"#94a3b8"}}>Dư nợ: <b style={{color:barC}}>{fVND(card.duNo)}</b></span>
+            <span style={{fontSize:11,color:"#94a3b8"}}>Hạn mức: {fVND(card.hanMuc)}</span>
+          </div>
+          <div style={{height:8,background:"#0f172a",borderRadius:4,overflow:"hidden"}}>
+            <div style={{width:`${Math.min(tiLe,100)}%`,height:"100%",background:barC,borderRadius:4,transition:"width 0.3s"}}/>
+          </div>
+          <div style={{marginTop:4,display:"flex",justifyContent:"space-between"}}>
+            <span style={{fontSize:11,color:barC,fontWeight:700}}>{tiLe.toFixed(1)}% đã dùng</span>
+            <span style={{fontSize:11,color:"#4ade80"}}>Khả dụng: <b>{fVND(khaDung)}</b></span>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:10,color:"#475569"}}>📄 Sao kê:</span>
+            <span style={{fontSize:12,color:"#94a3b8",fontWeight:600}}>Ngày {card.ngaySaoKe}</span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:10,color:"#475569"}}>⏰ Thanh toán:</span>
+            <span style={{fontSize:12,color:"#94a3b8",fontWeight:600}}>Ngày {card.ngayThanhToan}</span>
+          </div>
+          {!paid && (
+            <div style={{marginLeft:"auto",padding:"3px 10px",borderRadius:20,background:urgent?"#7f1d1d":"#0f172a",border:`1px solid ${urgent?"#f87171":"#334155"}`}}>
+              <span style={{fontSize:11,fontWeight:700,color:urgent?"#f87171":"#94a3b8"}}>{urgent?"⚠":"⏳"} Còn {days} ngày</span>
+            </div>
+          )}
+          {card.thanhToanToiThieu > 0 && <div style={{fontSize:11,color:"#64748b"}}>Tối thiểu: {fVND(card.thanhToanToiThieu)}</div>}
+        </div>
+        <div style={{marginTop:10,borderTop:"1px solid #0f172a",paddingTop:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>setExpandedCard(isExpanded?null:card.id)}>
+            <span style={{fontSize:11,color:"#a78bfa",fontWeight:600}}>
+              💳 Trả góp {cardInsts.length>0?`(${cardInsts.length} khoản · còn ${fVND(totalInstRemaining)})`:""}
+            </span>
+            <span style={{fontSize:10,color:"#334155",marginLeft:"auto"}}>{isExpanded?"▲":"▼"}</span>
+            <button onClick={e=>{e.stopPropagation();openAddInst(card.id);}}
+              style={{background:"#a78bfa",border:"none",borderRadius:5,padding:"2px 10px",cursor:"pointer",fontSize:11,color:"#fff",fontWeight:600}}>+ Thêm</button>
+          </div>
+          {isExpanded && (
+            <div style={{marginTop:8}}>
+              {cardInsts.length === 0 ? (
+                <div style={{fontSize:11,color:"#334155",padding:"6px 0"}}>Chưa có khoản trả góp</div>
+              ) : cardInsts.map(inst => {
+                const monthly = inst.soKy > 0 ? inst.soTienGoc/inst.soKy : 0;
+                const remaining = (inst.soKy-inst.kyDaTra)*monthly;
+                const pct = inst.soKy>0?inst.kyDaTra/inst.soKy*100:0;
+                return (
+                  <div key={inst.id} style={{background:"#0f172a",borderRadius:8,padding:"8px 12px",marginBottom:6}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                      <span style={{fontSize:12,color:"#e2e8f0",fontWeight:600}}>{inst.ten}</span>
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={()=>openEditInst(inst)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:12}}>✏</button>
+                        <button onClick={()=>deleteInst(inst.id)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:14}}>×</button>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#64748b",marginBottom:6}}>
+                      <span>{fVND(monthly)}/tháng · Kỳ {inst.kyDaTra}/{inst.soKy}</span>
+                      <span style={{color:"#fbbf24"}}>Còn: {fVND(remaining)}</span>
+                    </div>
+                    <div style={{height:5,background:"#1e293b",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{width:`${pct}%`,height:"100%",background:"#a78bfa",borderRadius:3}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        <span style={{fontWeight:700,fontSize:16,color:"#38bdf8"}}>💳 Quản lý thẻ tín dụng</span>
+        <button onClick={openAdd} style={{marginLeft:"auto",padding:"7px 16px",borderRadius:20,border:"none",background:"linear-gradient(135deg,#3b82f6,#06b6d4)",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>+ Thêm thẻ</button>
+      </div>
+
+      {cards.length > 0 && (
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+          {[
+            {l:"Số thẻ",           v:cards.length+"",           unit:"thẻ", c:"#38bdf8"},
+            {l:"Tổng hạn mức",     v:fVND(totalLimit),          unit:"",    c:"#94a3b8"},
+            {l:"Tổng dư nợ",       v:fVND(totalDebt),           unit:"",    c:tiLeTong>70?"#f87171":tiLeTong>30?"#fbbf24":"#4ade80"},
+            {l:"Hạn mức khả dụng", v:fVND(totalLimit-totalDebt),unit:"",    c:"#4ade80"},
+          ].map(({l,v,unit,c}) => (
+            <div key={l} style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",borderTop:`3px solid ${c}`}}>
+              <div style={{fontSize:10,color:"#475569",marginBottom:4}}>{l}</div>
+              <div style={{fontWeight:700,fontSize:16,color:c}}>{v} <span style={{fontSize:11}}>{unit}</span></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {cards.length === 0 ? (
+        <div style={{textAlign:"center",padding:"60px 20px",color:"#475569"}}>
+          <div style={{fontSize:40,marginBottom:12}}>💳</div>
+          <div style={{fontSize:14,marginBottom:6}}>Chưa có thẻ tín dụng nào</div>
+          <div style={{fontSize:12}}>Thêm thẻ để theo dõi hạn mức và ngày thanh toán</div>
+        </div>
+      ) : (
+        <div>
+          {unpaidCards.length > 0 && (
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#fbbf24",marginBottom:12}}>⏳ Chưa thanh toán ({unpaidCards.length})</div>
+              <div style={{display:"grid",gap:14}}>{unpaidCards.map(renderCard)}</div>
+            </div>
+          )}
+          {paidCards.length > 0 && (
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginBottom:12}}>✅ Đã thanh toán ({paidCards.length})</div>
+              <div style={{display:"grid",gap:14}}>{paidCards.map(renderCard)}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showModal && (
+        <div className="modal-overlay" onClick={()=>setShowModal(false)}>
+          <div className="modal-box" onClick={e=>e.stopPropagation()}>
+            <h3 style={{color:"#38bdf8",marginBottom:16,fontSize:15}}>{editItem?"Sửa thẻ":"Thêm thẻ tín dụng"}</h3>
+            <div style={{display:"grid",gap:12}}>
+              <div>
+                <label style={labelS}>Tên thẻ *</label>
+                <input style={inputS} placeholder="VD: Vietcombank Visa Platinum" value={form.ten} onChange={e=>setForm({...form,ten:e.target.value})}/>
+              </div>
+              <div>
+                <label style={labelS}>Ngân hàng</label>
+                <input style={inputS} placeholder="VD: VCB, MB, TCB..." value={form.nganHang} onChange={e=>setForm({...form,nganHang:e.target.value})}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <label style={labelS}>Hạn mức (đ) *</label>
+                  <input style={inputS} type="number" placeholder="50000000" value={form.hanMuc} onChange={e=>setForm({...form,hanMuc:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={labelS}>Dư nợ hiện tại (đ)</label>
+                  <input style={inputS} type="number" placeholder="0" value={form.duNo} onChange={e=>setForm({...form,duNo:e.target.value})}/>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <label style={labelS}>Ngày sao kê (1-31)</label>
+                  <input style={inputS} type="number" min="1" max="31" placeholder="5" value={form.ngaySaoKe} onChange={e=>setForm({...form,ngaySaoKe:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={labelS}>Ngày thanh toán (1-31) *</label>
+                  <input style={inputS} type="number" min="1" max="31" placeholder="25" value={form.ngayThanhToan} onChange={e=>setForm({...form,ngayThanhToan:e.target.value})}/>
+                </div>
+              </div>
+              <div>
+                <label style={labelS}>Thanh toán tối thiểu (đ)</label>
+                <input style={inputS} type="number" placeholder="0" value={form.thanhToanToiThieu} onChange={e=>setForm({...form,thanhToanToiThieu:e.target.value})}/>
+              </div>
+              <div>
+                <label style={labelS}>Màu thẻ</label>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {COLORS.map(c => (
+                    <div key={c} onClick={()=>setForm({...form,mauSac:c})}
+                      style={{width:28,height:28,borderRadius:6,background:c,cursor:"pointer",border:form.mauSac===c?"3px solid #fff":"3px solid transparent"}}/>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:16}}>
+              <button onClick={()=>setShowModal(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
+              <button onClick={save} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#3b82f6,#06b6d4)",color:"#fff",fontWeight:700,cursor:"pointer"}}>{editItem?"Lưu":"Thêm thẻ"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showInstModal && (
+        <div className="modal-overlay" onClick={()=>setShowInstModal(false)}>
+          <div className="modal-box" onClick={e=>e.stopPropagation()}>
+            <h3 style={{color:"#a78bfa",marginBottom:16,fontSize:15}}>{editInst?"Sửa trả góp":"Thêm khoản trả góp"}</h3>
+            <div style={{display:"grid",gap:12}}>
+              <div>
+                <label style={labelS}>Tên khoản *</label>
+                <input style={inputS} placeholder="VD: iPhone 16 Pro trả góp 12 tháng" value={instForm.ten} onChange={e=>setInstForm({...instForm,ten:e.target.value})}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <label style={labelS}>Tổng tiền gốc (đ) *</label>
+                  <input style={inputS} type="number" placeholder="30000000" value={instForm.soTienGoc} onChange={e=>setInstForm({...instForm,soTienGoc:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={labelS}>Số kỳ *</label>
+                  <input style={inputS} type="number" min="1" placeholder="12" value={instForm.soKy} onChange={e=>setInstForm({...instForm,soKy:e.target.value})}/>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <label style={labelS}>Kỳ đã trả</label>
+                  <input style={inputS} type="number" min="0" placeholder="0" value={instForm.kyDaTra} onChange={e=>setInstForm({...instForm,kyDaTra:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={labelS}>Ngày bắt đầu</label>
+                  <input style={inputS} type="date" value={instForm.ngayBatDau} onChange={e=>setInstForm({...instForm,ngayBatDau:e.target.value})}/>
+                </div>
+              </div>
+              {instForm.soTienGoc && instForm.soKy && (
+                <div style={{background:"#0f172a",borderRadius:8,padding:"10px 14px",fontSize:12}}>
+                  <span style={{color:"#64748b"}}>Mỗi kỳ: </span>
+                  <span style={{color:"#a78bfa",fontWeight:700}}>{((parseFloat(instForm.soTienGoc)||0)/(parseInt(instForm.soKy)||1)).toLocaleString("vi-VN")}đ</span>
+                </div>
+              )}
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:16}}>
+              <button onClick={()=>setShowInstModal(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
+              <button onClick={saveInst} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#a78bfa",color:"#fff",fontWeight:700,cursor:"pointer"}}>{editInst?"Lưu":"Thêm"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Expense Tab ───────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function ExpenseTab() {
+  const todayD = new Date();
+  const todayStr = todayD.toISOString().slice(0,10);
+  const [viewMonth, setViewMonth] = useState(todayD.getFullYear()*100 + todayD.getMonth()+1);
+  const [fixedExpenses, setFixed] = useLS("azfin_fixed_expenses", []);
+  const [transactions, setTrans]  = useLS("azfin_transactions", []);
+  const [monthlyIncome, setIncome] = useLS("azfin_monthly_income", {});
+  const [viewMode, setViewMode]   = useState("diary");
+  // quick-add state
+  const [qTen, setQTen]       = useState("");
+  const [qSoTien, setQSoTien] = useState("");
+  const [qBuoi, setQBuoi]     = useState("trua");
+  const [qCat, setQCat]       = useState("anUong");
+  // full form
+  const [showForm, setShowForm]   = useState(false);
+  const [showAddFixed, setShowAddFixed] = useState(false);
+  const [editFixed, setEditFixed] = useState(null);
+  const [editTrans, setEditTrans] = useState(null);
+  const [editingIncome, setEditingIncome] = useState(false);
+  const [incomeInput, setIncomeInput] = useState("");
+  const emptyFixed = {ten:"",soTien:"",danhMuc:"dinhKy",ngayThuThi:"1"};
+  const emptyTrans = {ten:"",soTien:"",loai:"chi",danhMuc:"anUong",ngay:todayStr,buoi:"trua",loaiGD:"thucTe"};
+  const [formFixed, setFormFixed] = useState(emptyFixed);
+  const [formTrans, setFormTrans] = useState(emptyTrans);
+
+  const BUOI = [
+    {id:"sang",  l:"Sáng",  icon:"🌅"},
+    {id:"trua",  l:"Trưa",  icon:"☀"},
+    {id:"chieu", l:"Chiều", icon:"🌆"},
+    {id:"toi",   l:"Tối",   icon:"🌙"},
+  ];
+  const DANH_MUC_CHI = [
+    {id:"anUong",  l:"🍜 Ăn uống"}, {id:"muaSam",  l:"🛒 Mua sắm"},
+    {id:"diLai",   l:"🚗 Đi lại"},   {id:"giaiTri", l:"🎮 Giải trí"},
+    {id:"sucKhoe", l:"💊 Sức khỏe"}, {id:"xaHoi",   l:"🤝 Xã hội"},
+    {id:"khac",    l:"📦 Khác"},
+  ];
+  const DANH_MUC_FIXED = [
+    {id:"nha",l:"🏠 Nhà ở"},{id:"baoHiem",l:"🛡 Bảo hiểm"},
+    {id:"vay",l:"🏦 Khoản vay"},{id:"dinhKy",l:"🔄 Định kỳ"},{id:"khac",l:"📦 Khác"},
+  ];
+  const ALL_CATS = [...DANH_MUC_FIXED,...DANH_MUC_CHI,{id:"luong",l:"💰 Lương / Thưởng"}];
+
+  const prevMonth = () => { let y=Math.floor(viewMonth/100),m=viewMonth%100-1; if(m<1){m=12;y--;} setViewMonth(y*100+m); };
+  const nextMonth = () => { let y=Math.floor(viewMonth/100),m=viewMonth%100+1; if(m>12){m=1;y++;} setViewMonth(y*100+m); };
+  const mk = useMemo(()=>{ const y=Math.floor(viewMonth/100),m=viewMonth%100; return `${y}-${String(m).padStart(2,"0")}`; },[viewMonth]);
+  const monthLabel = useMemo(()=>{ const y=Math.floor(viewMonth/100),m=viewMonth%100; return `Tháng ${m}/${y}`; },[viewMonth]);
+
+  const fVND = n => n>=1e9?(n/1e9).toFixed(1)+"tỷ":n>=1e6?(n/1e6).toFixed(1)+"tr":n.toLocaleString("vi-VN");
+  const getCatLabel = id => ALL_CATS.find(c=>c.id===id)?.l || id;
+  const getCatIcon  = id => (ALL_CATS.find(c=>c.id===id)?.l||"📦").split(" ")[0];
+  const getBuoi     = id => BUOI.find(b=>b.id===id);
+
+  const thuNhap   = monthlyIncome[mk] || 0;
+  const monthTrans= useMemo(()=>transactions.filter(t=>t.ngay.startsWith(mk)),[transactions,mk]);
+  const totalFixed= fixedExpenses.reduce((s,e)=>s+e.soTien,0);
+
+  // Split by loaiGD — old entries without field default to "thucTe"
+  const thucTeTrans = useMemo(()=>monthTrans.filter(t=>(t.loaiGD||"thucTe")==="thucTe"),[monthTrans]);
+  const duKienTrans = useMemo(()=>monthTrans.filter(t=>t.loaiGD==="duKien"),[monthTrans]);
+
+  const chiThucTe  = thucTeTrans.filter(t=>t.loai==="chi").reduce((s,t)=>s+t.soTien,0);
+  const chiDuKien  = duKienTrans.filter(t=>t.loai==="chi").reduce((s,t)=>s+t.soTien,0);
+  const tongThu    = thuNhap + thucTeTrans.filter(t=>t.loai==="thu").reduce((s,t)=>s+t.soTien,0);
+  const tongChiTT  = totalFixed + chiThucTe;   // thực tế
+  const tongChiDK  = totalFixed + chiDuKien;   // dự kiến
+  const conLai     = tongThu - tongChiTT;
+  const chenhLech  = tongChiDK - tongChiTT;    // >0 = tiết kiệm so với kế hoạch
+
+  // Diary: group thucTe by date
+  const diaryDays = useMemo(()=>{
+    const map={};
+    thucTeTrans.forEach(t=>{
+      if(!map[t.ngay]) map[t.ngay]={entries:[],chiSum:0};
+      map[t.ngay].entries.push(t);
+      if(t.loai==="chi") map[t.ngay].chiSum+=t.soTien;
+    });
+    return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0]));
+  },[thucTeTrans]);
+
+  // Category breakdown (thucTe chi + fixed)
+  const catMap = useMemo(()=>{
+    const m={};
+    thucTeTrans.filter(t=>t.loai==="chi").forEach(t=>{m[t.danhMuc]=(m[t.danhMuc]||0)+t.soTien;});
+    fixedExpenses.forEach(e=>{m[e.danhMuc]=(m[e.danhMuc]||0)+e.soTien;});
+    return m;
+  },[thucTeTrans,fixedExpenses]);
+  const totalCatChi = Object.values(catMap).reduce((s,v)=>s+v,0);
+
+  // Quick add (thực tế, hôm nay)
+  const quickAdd = () => {
+    if (!qTen.trim() || !qSoTien) return;
+    setTrans([...transactions,{id:Date.now(),ngay:todayStr,ten:qTen.trim(),soTien:parseFloat(qSoTien)||0,loai:"chi",danhMuc:qCat,buoi:qBuoi,loaiGD:"thucTe"}]);
+    setQTen(""); setQSoTien("");
+  };
+
+  // Full form save
+  const saveTrans = () => {
+    if (!formTrans.ten || !formTrans.soTien) return;
+    const item = {id:editTrans?.id||Date.now(),ngay:formTrans.ngay,ten:formTrans.ten.trim(),soTien:parseFloat(formTrans.soTien),loai:formTrans.loai,danhMuc:formTrans.danhMuc,buoi:formTrans.buoi||"",loaiGD:formTrans.loaiGD||"thucTe"};
+    if(editTrans) setTrans(transactions.map(t=>t.id===editTrans.id?item:t));
+    else setTrans([...transactions,item]);
+    setShowForm(false); setEditTrans(null); setFormTrans(emptyTrans);
+  };
+  const openEditTrans = t => { setEditTrans(t); setFormTrans({...emptyTrans,...t,soTien:String(t.soTien)}); setShowForm(true); };
+
+  // Fixed form save
+  const saveFixed = () => {
+    if (!formFixed.ten || !formFixed.soTien) return;
+    const item = {id:editFixed?.id||Date.now(),ten:formFixed.ten.trim(),soTien:parseFloat(formFixed.soTien),danhMuc:formFixed.danhMuc,ngayThuThi:parseInt(formFixed.ngayThuThi)||1};
+    if(editFixed) setFixed(fixedExpenses.map(e=>e.id===editFixed.id?item:e));
+    else setFixed([...fixedExpenses,item]);
+    setShowAddFixed(false); setEditFixed(null); setFormFixed(emptyFixed);
+  };
+  const openEditFixed = e => { setEditFixed(e); setFormFixed({...e,soTien:String(e.soTien),ngayThuThi:String(e.ngayThuThi)}); setShowAddFixed(true); };
+
+  // Shared subcomponents
+  const FixedSection = () => (
+    <div style={{background:"#1e293b",borderRadius:10,padding:"14px 16px",marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:showAddFixed?10:0}}>
+        <span style={{fontWeight:700,fontSize:13,color:"#fbbf24"}}>🔄 Chi tiêu cố định</span>
+        <span style={{fontSize:11,color:"#475569",background:"#0f172a",borderRadius:10,padding:"1px 8px"}}>{fVND(totalFixed)}đ/tháng</span>
+        <button onClick={()=>{if(!showAddFixed||editFixed){setEditFixed(null);setFormFixed(emptyFixed);}setShowAddFixed(v=>!v);}}
+          style={{marginLeft:"auto",background:"#fbbf24",border:"none",borderRadius:6,padding:"3px 12px",cursor:"pointer",fontSize:12,color:"#000",fontWeight:700}}>
+          {showAddFixed&&!editFixed?"▲ Ẩn":"+ Thêm"}
+        </button>
+      </div>
+      {showAddFixed && (
+        <div style={{background:"#0f172a",borderRadius:8,padding:12,marginBottom:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <div><label style={labelS}>Tên khoản *</label><input style={inputS} placeholder="VD: Tiền thuê nhà" value={formFixed.ten} onChange={e=>setFormFixed({...formFixed,ten:e.target.value})}/></div>
+            <div><label style={labelS}>Số tiền (đ) *</label><input style={inputS} type="number" placeholder="8000000" value={formFixed.soTien} onChange={e=>setFormFixed({...formFixed,soTien:e.target.value})}/></div>
+            <div><label style={labelS}>Danh mục</label><select style={inputS} value={formFixed.danhMuc} onChange={e=>setFormFixed({...formFixed,danhMuc:e.target.value})}>{DANH_MUC_FIXED.map(d=><option key={d.id} value={d.id}>{d.l}</option>)}</select></div>
+            <div><label style={labelS}>Ngày thu tiền</label><input style={inputS} type="number" min="1" max="31" placeholder="1" value={formFixed.ngayThuThi} onChange={e=>setFormFixed({...formFixed,ngayThuThi:e.target.value})}/></div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button onClick={()=>{setShowAddFixed(false);setEditFixed(null);setFormFixed(emptyFixed);}} style={{flex:1,padding:"8px",borderRadius:6,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer",fontSize:12}}>Hủy</button>
+            <button onClick={saveFixed} style={{flex:1,padding:"8px",borderRadius:6,border:"none",background:"#fbbf24",color:"#000",fontWeight:700,cursor:"pointer",fontSize:12}}>{editFixed?"Lưu":"Thêm"}</button>
+          </div>
+        </div>
+      )}
+      {fixedExpenses.length===0 ? (
+        <div style={{fontSize:12,color:"#334155",textAlign:"center",padding:"8px 0",marginTop:showAddFixed?0:4}}>Chưa có khoản cố định</div>
+      ) : (
+        <div style={{marginTop:6}}>
+          {fixedExpenses.map(e=>(
+            <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:"1px solid #0f172a"}}>
+              <span style={{fontSize:15}}>{getCatIcon(e.danhMuc)}</span>
+              <div style={{flex:1}}><div style={{fontSize:12,color:"#e2e8f0"}}>{e.ten}</div><div style={{fontSize:10,color:"#475569"}}>Ngày {e.ngayThuThi} hàng tháng</div></div>
+              <span style={{fontSize:13,fontWeight:700,color:"#f87171"}}>-{fVND(e.soTien)}đ</span>
+              <button onClick={()=>openEditFixed(e)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:13,padding:"0 2px"}}>✏</button>
+              <button onClick={()=>setFixed(fixedExpenses.filter(x=>x.id!==e.id))} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:16,padding:"0 2px"}}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // Full form (edit or add dự kiến)
+  const FullForm = () => showForm ? (
+    <div style={{background:"#0f172a",borderRadius:8,padding:14,marginBottom:12,border:"1px solid #334155"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{fontSize:12,fontWeight:700,color: formTrans.loaiGD==="duKien"?"#fbbf24":"#4ade80"}}>
+          {formTrans.loaiGD==="duKien"?"📋 Giao dịch dự kiến":"✅ Giao dịch thực tế"}
+        </span>
+        {editTrans && <span style={{fontSize:10,color:"#475569"}}>Đang sửa</span>}
+        <button onClick={()=>{setShowForm(false);setEditTrans(null);setFormTrans(emptyTrans);}} style={{marginLeft:"auto",background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+        <div><label style={labelS}>Tên *</label><input style={inputS} placeholder="VD: Shopee Food" value={formTrans.ten} onChange={e=>setFormTrans({...formTrans,ten:e.target.value})}/></div>
+        <div><label style={labelS}>Số tiền (đ) *</label><input style={inputS} type="number" placeholder="110000" value={formTrans.soTien} onChange={e=>setFormTrans({...formTrans,soTien:e.target.value})}/></div>
+        <div><label style={labelS}>Ngày</label><input style={inputS} type="date" value={formTrans.ngay} onChange={e=>setFormTrans({...formTrans,ngay:e.target.value})}/></div>
+        <div><label style={labelS}>Buổi</label>
+          <select style={inputS} value={formTrans.buoi||""} onChange={e=>setFormTrans({...formTrans,buoi:e.target.value})}>
+            <option value="">— Không rõ</option>
+            {BUOI.map(b=><option key={b.id} value={b.id}>{b.icon} {b.l}</option>)}
+          </select>
+        </div>
+        <div><label style={labelS}>Loại</label>
+          <select style={inputS} value={formTrans.loai} onChange={e=>setFormTrans({...formTrans,loai:e.target.value,danhMuc:e.target.value==="thu"?"luong":"anUong"})}>
+            <option value="chi">💸 Chi tiêu</option>
+            <option value="thu">💰 Thu nhập</option>
+          </select>
+        </div>
+        <div><label style={labelS}>Danh mục</label>
+          <select style={inputS} value={formTrans.danhMuc} onChange={e=>setFormTrans({...formTrans,danhMuc:e.target.value})}>
+            {(formTrans.loai==="chi"?DANH_MUC_CHI:[{id:"luong",l:"💰 Lương / Thưởng"},...DANH_MUC_CHI]).map(d=><option key={d.id} value={d.id}>{d.l}</option>)}
+          </select>
+        </div>
+        {!editTrans && (
+          <div style={{gridColumn:"1/-1"}}>
+            <label style={labelS}>Loại giao dịch</label>
+            <div style={{display:"flex",gap:8}}>
+              {[{v:"thucTe",l:"✅ Thực tế",c:"#4ade80"},{v:"duKien",l:"📋 Dự kiến",c:"#fbbf24"}].map(o=>(
+                <button key={o.v} onClick={()=>setFormTrans({...formTrans,loaiGD:o.v})}
+                  style={{flex:1,padding:"8px",borderRadius:6,border:`2px solid ${formTrans.loaiGD===o.v?o.c:"#334155"}`,background:formTrans.loaiGD===o.v?o.c+"22":"transparent",color:formTrans.loaiGD===o.v?o.c:"#64748b",cursor:"pointer",fontSize:12,fontWeight:700}}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>{setShowForm(false);setEditTrans(null);setFormTrans(emptyTrans);}} style={{flex:1,padding:"9px",borderRadius:6,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer",fontSize:12}}>Hủy</button>
+        <button onClick={saveTrans} style={{flex:2,padding:"9px",borderRadius:6,border:"none",background:formTrans.loaiGD==="duKien"?"#fbbf24":"#4ade80",color:"#000",fontWeight:700,cursor:"pointer",fontSize:12}}>{editTrans?"Lưu thay đổi":"Thêm giao dịch"}</button>
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <div>
+      {/* Header + month nav */}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,flexWrap:"wrap"}}>
+        <span style={{fontWeight:700,fontSize:16,color:"#38bdf8"}}>💰 Quản lý chi tiêu</span>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:"auto"}}>
+          <button onClick={prevMonth} style={{background:"#1e293b",border:"1px solid #334155",color:"#94a3b8",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:14}}>‹</button>
+          <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0",minWidth:110,textAlign:"center"}}>{monthLabel}</span>
+          <button onClick={nextMonth} style={{background:"#1e293b",border:"1px solid #334155",color:"#94a3b8",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:14}}>›</button>
+        </div>
+      </div>
+
+      {/* ── Quick-add bar ── */}
+      <div style={{background:"#1e293b",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          <select value={qCat} onChange={e=>setQCat(e.target.value)}
+            style={{padding:"6px 8px",borderRadius:6,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:13,outline:"none",minWidth:40}}>
+            {DANH_MUC_CHI.map(d=><option key={d.id} value={d.id}>{d.l.split(" ")[0]}</option>)}
+          </select>
+          <input placeholder="Ghi chú chi tiêu... (Enter để thêm)" value={qTen}
+            onChange={e=>setQTen(e.target.value)} onKeyDown={e=>e.key==="Enter"&&quickAdd()}
+            style={{flex:1,minWidth:120,padding:"6px 10px",borderRadius:6,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:13,outline:"none"}}/>
+          <input type="number" placeholder="Số tiền" value={qSoTien}
+            onChange={e=>setQSoTien(e.target.value)} onKeyDown={e=>e.key==="Enter"&&quickAdd()}
+            style={{width:100,padding:"6px 8px",borderRadius:6,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:13,outline:"none"}}/>
+          <select value={qBuoi} onChange={e=>setQBuoi(e.target.value)}
+            style={{padding:"6px 8px",borderRadius:6,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:13,outline:"none"}}>
+            {BUOI.map(b=><option key={b.id} value={b.id}>{b.icon} {b.l}</option>)}
+          </select>
+          <button onClick={quickAdd}
+            style={{padding:"6px 14px",borderRadius:6,border:"none",background:"#4ade80",color:"#000",fontWeight:700,cursor:"pointer",fontSize:12,whiteSpace:"nowrap"}}>
+            ✅ Thực tế
+          </button>
+          <button onClick={()=>{setEditTrans(null);setFormTrans({...emptyTrans,loaiGD:"duKien",buoi:""});setShowForm(v=>!v);}}
+            style={{padding:"6px 14px",borderRadius:6,border:"none",background:"#fbbf24",color:"#000",fontWeight:700,cursor:"pointer",fontSize:12,whiteSpace:"nowrap"}}>
+            📋 Dự kiến
+          </button>
+        </div>
+      </div>
+
+      {/* ── View toggle ── */}
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <button onClick={()=>setViewMode("diary")}  style={tabS(viewMode==="diary","#a78bfa")}>📖 Nhật ký</button>
+        <button onClick={()=>setViewMode("summary")} style={tabS(viewMode==="summary","#38bdf8")}>📊 Tổng kết</button>
+      </div>
+
+      {/* ══ DIARY VIEW ══ */}
+      {viewMode==="diary" && (
+        <div>
+          <FullForm/>
+
+          {/* Diary entries grouped by date */}
+          {diaryDays.length === 0 ? (
+            <div style={{background:"#1e293b",borderRadius:10,padding:"30px 20px",textAlign:"center",color:"#475569",marginBottom:12}}>
+              <div style={{fontSize:28,marginBottom:8}}>📖</div>
+              <div style={{fontSize:13}}>Chưa có giao dịch thực tế nào trong {monthLabel}</div>
+              <div style={{fontSize:11,marginTop:4}}>Dùng ô nhập phía trên để ghi chép nhanh</div>
+            </div>
+          ) : (
+            diaryDays.map(([date,{entries,chiSum}])=>{
+              const d = new Date(date+"T00:00:00");
+              const dayLabel = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}`;
+              const isToday = date===todayStr;
+              return (
+                <div key={date} style={{background:"#1e293b",borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+                  {/* Day header */}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 14px",background:"#0f172a",borderBottom:"1px solid #334155"}}>
+                    <span style={{fontSize:12,fontWeight:700,color:isToday?"#38bdf8":"#94a3b8"}}>
+                      📅 {isToday?"Hôm nay — ":""}{dayLabel}
+                    </span>
+                    <span style={{fontSize:13,fontWeight:700,color:"#f87171"}}>-{fVND(chiSum)}đ</span>
+                  </div>
+                  {/* Entries by buoi */}
+                  {["sang","trua","chieu","toi",""].map(buoiId=>{
+                    const group = entries.filter(t=>(t.buoi||"")===buoiId);
+                    if(!group.length) return null;
+                    const b = getBuoi(buoiId);
+                    return (
+                      <div key={buoiId}>
+                        {buoiId && (
+                          <div style={{padding:"5px 14px",fontSize:11,color:"#475569",background:"#0a0f1e",borderBottom:"1px solid #0f172a"}}>
+                            {b.icon} {b.l}
+                          </div>
+                        )}
+                        {group.map(t=>(
+                          <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderBottom:"1px solid #0a0f1e"}}>
+                            <span style={{fontSize:15}}>{getCatIcon(t.danhMuc)}</span>
+                            <div style={{flex:1}}>
+                              <span style={{fontSize:13,color:"#e2e8f0"}}>{t.ten}</span>
+                              <span style={{fontSize:10,color:"#475569",marginLeft:8}}>{getCatLabel(t.danhMuc)}</span>
+                            </div>
+                            <span style={{fontSize:13,fontWeight:700,color:t.loai==="chi"?"#f87171":"#4ade80"}}>
+                              {t.loai==="chi"?"-":"+"}{fVND(t.soTien)}đ
+                            </span>
+                            <button onClick={()=>openEditTrans(t)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:13,padding:"0 2px"}}>✏</button>
+                            <button onClick={()=>setTrans(transactions.filter(x=>x.id!==t.id))} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:16,padding:"0 2px"}}>×</button>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })
+          )}
+
+          {/* Dự kiến section (collapsible) */}
+          {duKienTrans.length > 0 && (
+            <div style={{background:"#1e293b",borderRadius:10,padding:"12px 14px",marginTop:4,borderLeft:"3px solid #fbbf24"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#fbbf24",marginBottom:8}}>
+                📋 Dự kiến tháng này · {fVND(chiDuKien)}đ
+              </div>
+              {duKienTrans.filter(t=>t.loai==="chi").map(t=>(
+                <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:"1px solid #0a0f1e"}}>
+                  <span style={{fontSize:14}}>{getCatIcon(t.danhMuc)}</span>
+                  <span style={{flex:1,fontSize:12,color:"#94a3b8"}}>{t.ten}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#fbbf24"}}>-{fVND(t.soTien)}đ</span>
+                  <button onClick={()=>openEditTrans(t)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:13,padding:"0 2px"}}>✏</button>
+                  <button onClick={()=>setTrans(transactions.filter(x=>x.id!==t.id))} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:16,padding:"0 2px"}}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ SUMMARY VIEW ══ */}
+      {viewMode==="summary" && (
+        <div>
+          <FullForm/>
+
+          {/* Summary row: thu nhập (editable) */}
+          <div style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div>
+                <div style={{fontSize:10,color:"#475569",marginBottom:2}}>Thu nhập {monthLabel}</div>
+                <div style={{fontSize:18,fontWeight:700,color:"#4ade80"}}>+{fVND(tongThu)}đ</div>
+              </div>
+              {!editingIncome ? (
+                <button onClick={()=>{setIncomeInput(String(thuNhap));setEditingIncome(true);}}
+                  style={{background:"#0f172a",border:"1px solid #334155",color:"#94a3b8",borderRadius:6,padding:"5px 12px",cursor:"pointer",fontSize:11}}>
+                  ✏ Sửa lương
+                </button>
+              ) : (
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <input type="number" value={incomeInput} onChange={e=>setIncomeInput(e.target.value)}
+                    style={{width:130,padding:"5px 8px",borderRadius:6,border:"1px solid #334155",background:"#0f172a",color:"#e2e8f0",fontSize:12,outline:"none"}}
+                    onKeyDown={e=>{if(e.key==="Enter"){setIncome({...monthlyIncome,[mk]:parseFloat(incomeInput)||0});setEditingIncome(false);}}}/>
+                  <button onClick={()=>{setIncome({...monthlyIncome,[mk]:parseFloat(incomeInput)||0});setEditingIncome(false);}}
+                    style={{background:"#4ade80",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,color:"#000",fontWeight:700}}>✓</button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Chi dự kiến vs thực tế */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div style={{background:"#1e293b",borderRadius:10,padding:"12px 14px",borderTop:"3px solid #fbbf24"}}>
+              <div style={{fontSize:10,color:"#475569",marginBottom:3}}>Chi dự kiến</div>
+              <div style={{fontSize:17,fontWeight:700,color:"#fbbf24"}}>-{fVND(tongChiDK)}đ</div>
+              <div style={{fontSize:10,color:"#475569",marginTop:3}}>Cố định {fVND(totalFixed)} + Dự kiến {fVND(chiDuKien)}</div>
+            </div>
+            <div style={{background:"#1e293b",borderRadius:10,padding:"12px 14px",borderTop:"3px solid #f87171"}}>
+              <div style={{fontSize:10,color:"#475569",marginBottom:3}}>Chi thực tế</div>
+              <div style={{fontSize:17,fontWeight:700,color:"#f87171"}}>-{fVND(tongChiTT)}đ</div>
+              <div style={{fontSize:10,color:"#475569",marginTop:3}}>Cố định {fVND(totalFixed)} + Thực chi {fVND(chiThucTe)}</div>
+            </div>
+          </div>
+
+          {/* Còn lại + chênh lệch */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <div style={{background:"#1e293b",borderRadius:10,padding:"12px 14px",borderTop:`3px solid ${conLai>=0?"#4ade80":"#f87171"}`}}>
+              <div style={{fontSize:10,color:"#475569",marginBottom:3}}>Còn lại thực tế</div>
+              <div style={{fontSize:17,fontWeight:700,color:conLai>=0?"#4ade80":"#f87171"}}>{conLai>=0?"+":""}{fVND(conLai)}đ</div>
+              <div style={{fontSize:10,color:"#475569",marginTop:3}}>{tongThu>0?`Đã chi ${(tongChiTT/tongThu*100).toFixed(0)}% thu nhập`:"Chưa nhập thu nhập"}</div>
+            </div>
+            <div style={{background:"#1e293b",borderRadius:10,padding:"12px 14px",borderTop:`3px solid ${chenhLech>=0?"#4ade80":"#f87171"}`}}>
+              <div style={{fontSize:10,color:"#475569",marginBottom:3}}>Tiết kiệm so kế hoạch</div>
+              <div style={{fontSize:17,fontWeight:700,color:chenhLech>=0?"#4ade80":"#f87171"}}>{chenhLech>=0?"+":""}{fVND(chenhLech)}đ</div>
+              <div style={{fontSize:10,color:"#475569",marginTop:3}}>{chenhLech>=0?"Chi ít hơn dự kiến":"Chi vượt kế hoạch"}</div>
+            </div>
+          </div>
+
+          {/* Category breakdown (thực tế + cố định) */}
+          {totalCatChi > 0 && (
+            <div style={{background:"#1e293b",borderRadius:10,padding:"14px 16px",marginBottom:12}}>
+              <div style={{fontWeight:700,fontSize:13,color:"#38bdf8",marginBottom:12}}>📊 Phân bổ chi thực tế</div>
+              {Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>{
+                const pct=(amt/totalCatChi*100);
+                return (
+                  <div key={cat} style={{marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                      <span style={{fontSize:12,color:"#94a3b8"}}>{getCatLabel(cat)}</span>
+                      <span style={{fontSize:12,color:"#e2e8f0",fontWeight:600}}>{pct.toFixed(1)}% · {fVND(amt)}đ</span>
+                    </div>
+                    <div style={{height:6,background:"#0f172a",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{width:`${pct}%`,height:"100%",background:"#a78bfa",borderRadius:3}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Fixed + Dự kiến list */}
+          <FixedSection/>
+          {duKienTrans.length > 0 && (
+            <div style={{background:"#1e293b",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid #fbbf24"}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#fbbf24",marginBottom:8}}>📋 Giao dịch dự kiến · {fVND(chiDuKien)}đ</div>
+              {duKienTrans.filter(t=>t.loai==="chi").map(t=>(
+                <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:"1px solid #0a0f1e"}}>
+                  <span style={{fontSize:14}}>{getCatIcon(t.danhMuc)}</span>
+                  <span style={{flex:1,fontSize:12,color:"#94a3b8"}}>{t.ten}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#fbbf24"}}>-{fVND(t.soTien)}đ</span>
+                  <button onClick={()=>openEditTrans(t)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:13,padding:"0 2px"}}>✏</button>
+                  <button onClick={()=>setTrans(transactions.filter(x=>x.id!==t.id))} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:16,padding:"0 2px"}}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── Loan Tab ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+function LoanTab() {
+  const [loans, setLoans] = useLS("azfin_loans", []);
+  const [showModal, setShowModal] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const emptyForm = {ten:"",loai:"vayTieuDung",soTienVay:"",laiSuat:"",soKy:"",kyDaTra:"0",ngayBatDau:"",ngayTraHangThang:"",soTienTraHangThang:"",nganHang:"",ghiChu:""};
+  const [form, setForm] = useState(emptyForm);
+
+  const LOAN_TYPES = [
+    {id:"vayTieuDung",l:"💰 Vay tiêu dùng",c:"#f59e0b"},
+    {id:"muaNha",     l:"🏠 Vay mua nhà",  c:"#3b82f6"},
+    {id:"muaXe",      l:"🚗 Vay mua xe",   c:"#10b981"},
+    {id:"khac",       l:"📦 Khác",         c:"#64748b"},
+  ];
+  const getType = id => LOAN_TYPES.find(t=>t.id===id) || LOAN_TYPES[3];
+
+  const calcEMI = (P, laiSuat, n) => {
+    if (!P || !n) return 0;
+    const r = laiSuat/100/12;
+    if (r === 0) return P/n;
+    return P * r * Math.pow(1+r,n) / (Math.pow(1+r,n)-1);
+  };
+  const calcRemaining = (P, laiSuat, n, paid) => {
+    const r = laiSuat/100/12;
+    if (r === 0) return P*(1-paid/n);
+    const emi = calcEMI(P,laiSuat,n);
+    return Math.max(0, P*Math.pow(1+r,paid) - emi*(Math.pow(1+r,paid)-1)/r);
+  };
+
+  const getLoanPeriod = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  };
+  const isPaidLoan = loan => {
+    if (loan.paidPeriod !== getLoanPeriod()) return false;
+    const nextDate = getNextPaymentDate(loan);
+    const du = daysUntil(nextDate);
+    if (du !== null && du <= 15) return false;
+    return true;
+  };
+
+  const getNextPaymentDate = loan => {
+    if (!loan.ngayTraHangThang) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const day = parseInt(loan.ngayTraHangThang);
+    let year = today.getFullYear(), month = today.getMonth();
+    if (today.getDate() >= day) {
+      month += 1;
+      if (month > 11) { month = 0; year += 1; }
+    }
+    const lastDay = new Date(year, month+1, 0).getDate();
+    return new Date(year, month, Math.min(day, lastDay));
+  };
+  const fDate = d => d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : null;
+  const daysUntil = d => { if(!d) return null; const t=new Date(); t.setHours(0,0,0,0); return Math.round((d-t)/(864e5)); };
+
+  const openAdd  = () => { setEditItem(null); setForm(emptyForm); setShowModal(true); };
+  const openEdit = l => { setEditItem(l); setForm({...l,soTienVay:String(l.soTienVay),laiSuat:String(l.laiSuat),soKy:String(l.soKy),kyDaTra:String(l.kyDaTra),ngayTraHangThang:String(l.ngayTraHangThang||""),soTienTraHangThang:String(l.soTienTraHangThang||"")}); setShowModal(true); };
+  const save = () => {
+    if (!form.ten || !form.soTienVay || !form.soKy) return;
+    const item = {id:editItem?.id||Date.now(), ten:form.ten.trim(), loai:form.loai, soTienVay:parseFloat(form.soTienVay)||0, laiSuat:parseFloat(form.laiSuat)||0, soKy:parseInt(form.soKy)||1, kyDaTra:parseInt(form.kyDaTra)||0, ngayBatDau:form.ngayBatDau, ngayTraHangThang:parseInt(form.ngayTraHangThang)||0, soTienTraHangThang:parseFloat(form.soTienTraHangThang)||0, nganHang:form.nganHang.trim(), ghiChu:form.ghiChu.trim(), paidPeriod:editItem?.paidPeriod||""};
+    if (editItem) setLoans(loans.map(l=>l.id===editItem.id?item:l));
+    else setLoans([...loans, item]);
+    setShowModal(false);
+  };
+  const del = id => setLoans(loans.filter(l=>l.id!==id));
+  const markPaid = loan => {
+    if (loan.kyDaTra >= loan.soKy) return;
+    setLoans(loans.map(l=>l.id===loan.id?{...l,kyDaTra:l.kyDaTra+1,paidPeriod:getLoanPeriod()}:l));
+  };
+  const undoPayment = loan => {
+    setLoans(loans.map(l=>l.id===loan.id?{...l,kyDaTra:Math.max(0,l.kyDaTra-1),paidPeriod:""}:l));
+  };
+
+  const fVND = n => n>=1e9?(n/1e9).toFixed(2)+"tỷ":n>=1e6?(n/1e6).toFixed(1)+"tr":Math.round(n).toLocaleString("vi-VN")+"đ";
+  const activeLoans    = loans.filter(l=>l.kyDaTra<l.soKy);
+  const completedLoans = loans.filter(l=>l.kyDaTra>=l.soKy);
+  const unpaidLoans    = activeLoans.filter(l=>!isPaidLoan(l));
+  const paidThisMonth  = activeLoans.filter(l=>isPaidLoan(l));
+  const totalRemaining = activeLoans.reduce((s,l)=>s+calcRemaining(l.soTienVay,l.laiSuat,l.soKy,l.kyDaTra),0);
+  const totalMonthly   = activeLoans.reduce((s,l)=>s+calcEMI(l.soTienVay,l.laiSuat,l.soKy),0);
+
+  const renderLoanCard = (loan, compact) => {
+    const emi = loan.soTienTraHangThang || calcEMI(loan.soTienVay,loan.laiSuat,loan.soKy);
+    const remaining = calcRemaining(loan.soTienVay,loan.laiSuat,loan.soKy,loan.kyDaTra);
+    const pct = loan.soKy>0?loan.kyDaTra/loan.soKy*100:0;
+    const t = getType(loan.loai);
+    const nextDate = getNextPaymentDate(loan);
+    const du = daysUntil(nextDate);
+    const nextStr = fDate(nextDate);
+
+    if (compact) return (
+      <div key={loan.id} style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",borderLeft:`4px solid ${t.c}`,opacity:0.65,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:12,color:"#4ade80"}}>✓</span>
+        <div style={{flex:1,minWidth:0}}>
+          <span style={{fontSize:13,color:"#64748b",fontWeight:600}}>{loan.ten}</span>
+          <span style={{fontSize:11,color:"#334155",marginLeft:8}}>{t.l}{loan.nganHang?` · ${loan.nganHang}`:""}</span>
+          <span style={{fontSize:11,color:"#4ade80",marginLeft:8}}>✓ Kỳ {loan.kyDaTra}/{loan.soKy}</span>
+          {nextStr && <span style={{fontSize:10,color:"#475569",marginLeft:8}}>Kỳ sau: {nextStr}</span>}
+        </div>
+        <span style={{fontSize:11,color:"#f87171",fontWeight:600}}>{fVND(remaining)}</span>
+        <button onClick={()=>undoPayment(loan)} style={{background:"#0f172a",border:"1px solid #334155",color:"#f59e0b",borderRadius:6,padding:"3px 7px",cursor:"pointer",fontSize:10}} title="Hoàn tác thanh toán">↩</button>
+        <button onClick={()=>openEdit(loan)} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:13}}>✎</button>
+        <button onClick={()=>del(loan.id)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:16}}>×</button>
+      </div>
+    );
+
+    let dueBg="#1e293b", dueColor="#64748b";
+    if (du !== null) { if (du<=0){dueBg="#450a0a";dueColor="#f87171";}else if(du<=3){dueBg="#451a03";dueColor="#fbbf24";}else if(du<=7){dueBg="#1c1917";dueColor="#fbbf24";} }
+
+    return (
+      <div key={loan.id} style={{background:"#1e293b",borderRadius:12,padding:"16px 20px",borderLeft:`4px solid ${t.c}`}}>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:10,gap:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14,color:"#e2e8f0"}}>{loan.ten}</div>
+            <div style={{fontSize:11,color:"#475569",marginTop:2}}>
+              {t.l}{loan.nganHang?` · ${loan.nganHang}`:""}{loan.laiSuat>0?` · ${loan.laiSuat}%/năm`:" · 0% lãi suất"}
+            </div>
+            {nextStr && (
+              <div style={{marginTop:5}}>
+                <span style={{background:dueBg,border:`1px solid ${dueColor}`,color:dueColor,borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:600}}>
+                  📅 Trả ngày {nextStr}{du!==null?` (${du<=0?"hôm nay":du===1?"ngày mai":du+"n"})` :""}
+                </span>
+              </div>
+            )}
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",flexShrink:0}}>
+            <button onClick={()=>markPaid(loan)}
+              style={{background:"#166534",border:"1px solid #4ade80",color:"#4ade80",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>
+              ✓ Trả kỳ {loan.kyDaTra+1}
+            </button>
+            <button onClick={()=>openEdit(loan)} style={{background:"#0f172a",border:"1px solid #334155",color:"#94a3b8",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11}}>Sửa</button>
+            <button onClick={()=>del(loan.id)} style={{background:"#0f172a",border:"1px solid #334155",color:"#f87171",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11}}>Xóa</button>
+          </div>
+        </div>
+        <div style={{marginBottom:6}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+            <span style={{fontSize:11,color:"#94a3b8"}}>Kỳ {loan.kyDaTra}/{loan.soKy} · {fVND(emi)}/tháng</span>
+            <span style={{fontSize:11,color:"#f87171",fontWeight:700}}>Còn: {fVND(remaining)}</span>
+          </div>
+          <div style={{height:8,background:"#0f172a",borderRadius:4,overflow:"hidden"}}>
+            <div style={{width:`${pct}%`,height:"100%",background:t.c,borderRadius:4,transition:"width 0.3s"}}/>
+          </div>
+          <div style={{marginTop:4,display:"flex",justifyContent:"space-between",fontSize:10,color:"#475569"}}>
+            <span>Đã trả: {fVND(loan.soTienVay-remaining)}</span>
+            <span>{pct.toFixed(0)}% hoàn thành</span>
+          </div>
+        </div>
+        {loan.ngayBatDau && <div style={{fontSize:10,color:"#334155"}}>Từ {loan.ngayBatDau}</div>}
+        {loan.ghiChu && <div style={{fontSize:10,color:"#475569",marginTop:2}}>{loan.ghiChu}</div>}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        <span style={{fontWeight:700,fontSize:16,color:"#38bdf8"}}>🏦 Quản lý khoản vay</span>
+        <button onClick={openAdd} style={{marginLeft:"auto",padding:"7px 16px",borderRadius:20,border:"none",background:"linear-gradient(135deg,#f59e0b,#ef4444)",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:12}}>+ Thêm khoản vay</button>
+      </div>
+
+      {loans.length > 0 && (
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+          {[
+            {l:"Đang vay",        v:activeLoans.length+"",  unit:"khoản", c:"#f87171"},
+            {l:"Tổng dư nợ",      v:fVND(totalRemaining),   unit:"",      c:"#f87171"},
+            {l:"Trả hàng tháng",  v:fVND(totalMonthly),     unit:"",      c:"#fbbf24"},
+          ].map(({l,v,unit,c}) => (
+            <div key={l} style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",borderTop:`3px solid ${c}`}}>
+              <div style={{fontSize:10,color:"#475569",marginBottom:4}}>{l}</div>
+              <div style={{fontWeight:700,fontSize:16,color:c}}>{v} <span style={{fontSize:11}}>{unit}</span></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {loans.length === 0 ? (
+        <div style={{textAlign:"center",padding:"60px 20px",color:"#475569"}}>
+          <div style={{fontSize:40,marginBottom:12}}>🏦</div>
+          <div style={{fontSize:14,marginBottom:6}}>Chưa có khoản vay nào</div>
+          <div style={{fontSize:12}}>Theo dõi vay tiêu dùng, vay mua nhà, mua xe...</div>
+        </div>
+      ) : (
+        <div>
+          {unpaidLoans.length > 0 && (
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#f87171",marginBottom:12}}>📋 Chưa thanh toán ({unpaidLoans.length})</div>
+              <div style={{display:"grid",gap:14}}>
+                {unpaidLoans.map(loan => renderLoanCard(loan, false))}
+              </div>
+            </div>
+          )}
+          {paidThisMonth.length > 0 && (
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#4ade80",marginBottom:12}}>✅ Đã thanh toán kỳ này ({paidThisMonth.length})</div>
+              <div style={{display:"grid",gap:8}}>
+                {paidThisMonth.map(loan => renderLoanCard(loan, true))}
+              </div>
+            </div>
+          )}
+          {completedLoans.length > 0 && (
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:"#64748b",marginBottom:12}}>🎉 Đã trả xong ({completedLoans.length})</div>
+              <div style={{display:"grid",gap:8}}>
+                {completedLoans.map(loan => {
+                  const t = getType(loan.loai);
+                  return (
+                    <div key={loan.id} style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",borderLeft:"4px solid #334155",opacity:0.5,display:"flex",alignItems:"center",gap:12}}>
+                      <span style={{fontSize:12,color:"#4ade80"}}>✓</span>
+                      <div style={{flex:1}}>
+                        <span style={{fontSize:13,color:"#64748b",fontWeight:600}}>{loan.ten}</span>
+                        <span style={{fontSize:11,color:"#334155",marginLeft:8}}>{t.l} · {fVND(loan.soTienVay)}</span>
+                      </div>
+                      <button onClick={()=>del(loan.id)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:16}}>×</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showModal && (
+        <div className="modal-overlay" onClick={()=>setShowModal(false)}>
+          <div className="modal-box" onClick={e=>e.stopPropagation()}>
+            <h3 style={{color:"#f59e0b",marginBottom:16,fontSize:15}}>{editItem?"Sửa khoản vay":"Thêm khoản vay"}</h3>
+            <div style={{display:"grid",gap:12}}>
+              <div>
+                <label style={labelS}>Tên khoản vay *</label>
+                <input style={inputS} placeholder="VD: Vay mua nhà VCB" value={form.ten} onChange={e=>setForm({...form,ten:e.target.value})}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <label style={labelS}>Loại vay</label>
+                  <select style={inputS} value={form.loai} onChange={e=>setForm({...form,loai:e.target.value})}>
+                    {LOAN_TYPES.map(t=><option key={t.id} value={t.id}>{t.l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelS}>Ngân hàng / Tổ chức</label>
+                  <input style={inputS} placeholder="VD: VCB, FE Credit..." value={form.nganHang} onChange={e=>setForm({...form,nganHang:e.target.value})}/>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <label style={labelS}>Số tiền vay (đ) *</label>
+                  <input style={inputS} type="number" placeholder="100000000" value={form.soTienVay} onChange={e=>setForm({...form,soTienVay:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={labelS}>Lãi suất (%/năm)</label>
+                  <input style={inputS} type="number" placeholder="8.5" value={form.laiSuat} onChange={e=>setForm({...form,laiSuat:e.target.value})}/>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                <div>
+                  <label style={labelS}>Số kỳ (tháng) *</label>
+                  <input style={inputS} type="number" min="1" placeholder="24" value={form.soKy} onChange={e=>setForm({...form,soKy:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={labelS}>Kỳ đã trả</label>
+                  <input style={inputS} type="number" min="0" placeholder="0" value={form.kyDaTra} onChange={e=>setForm({...form,kyDaTra:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={labelS}>Ngày trả (trong tháng)</label>
+                  <input style={inputS} type="number" min="1" max="31" placeholder="15" value={form.ngayTraHangThang} onChange={e=>setForm({...form,ngayTraHangThang:e.target.value})}/>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  <label style={labelS}>Ngày bắt đầu (DD/MM/YYYY)</label>
+                  <input style={inputS} placeholder="VD: 01/01/2024" value={form.ngayBatDau} onChange={e=>setForm({...form,ngayBatDau:e.target.value})}/>
+                </div>
+                <div>
+                  <label style={labelS}>Ghi chú</label>
+                  <input style={inputS} placeholder="VD: Cố định 5 năm đầu..." value={form.ghiChu} onChange={e=>setForm({...form,ghiChu:e.target.value})}/>
+                </div>
+              </div>
+              <div>
+                <label style={labelS}>Tiền trả hàng tháng (đ) — để trống để tự tính EMI</label>
+                <input style={inputS} type="number"
+                  placeholder={form.soTienVay&&form.soKy?String(Math.round(calcEMI(parseFloat(form.soTienVay)||0,parseFloat(form.laiSuat)||0,parseInt(form.soKy)||1))):"Tự tính theo EMI"}
+                  value={form.soTienTraHangThang}
+                  onChange={e=>setForm({...form,soTienTraHangThang:e.target.value})}/>
+                {form.soTienVay && form.soKy && !form.soTienTraHangThang && (
+                  <div style={{fontSize:10,color:"#475569",marginTop:3}}>Tự tính: {fVND(calcEMI(parseFloat(form.soTienVay)||0,parseFloat(form.laiSuat)||0,parseInt(form.soKy)||1))}/tháng</div>
+                )}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:16}}>
+              <button onClick={()=>setShowModal(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
+              <button onClick={save} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#f59e0b,#ef4444)",color:"#fff",fontWeight:700,cursor:"pointer"}}>{editItem?"Lưu":"Thêm"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1543,13 +3270,17 @@ function App() {
   const dotC = priceSource&&withData ? "#4ade80" : lastLog.startsWith("⏳") ? "#fbbf24" : "#f87171";
 
   const mainTabs = [
-    {k:"stock",  l:"📈 Cổ phiếu"},
-    {k:"fund",   l:"📊 Quỹ"},
-    {k:"crypto", l:"🪙 Crypto"},
-    {k:"dca",    l:"🧮 DCA"},
-    {k:"ai",     l:"🤖 AI"},
-    {k:"alert",  l:"🔔 Đầu tư"},
-    {k:"todo",   l:"📋 Todo"},
+    {k:"stock",   l:"📈 Cổ phiếu"},
+    {k:"fund",    l:"📊 Quỹ"},
+    {k:"crypto",  l:"🪙 Crypto"},
+    {k:"dca",     l:"🧮 DCA"},
+    {k:"ai",      l:"🤖 AI"},
+    {k:"alert",   l:"🔔 Đầu tư"},
+    {k:"todo",    l:"📋 Todo"},
+    {k:"finance", l:"📊 Tài chính"},
+    {k:"card",    l:"💳 Thẻ"},
+    {k:"expense", l:"💰 Chi tiêu"},
+    {k:"loan",    l:"🏦 Khoản vay"},
   ];
 
   return (
@@ -1638,6 +3369,18 @@ function App() {
         {/* ── ALERT TAB ── */}
         {mainTab==="alert" && <AlertTab activeAlerts={activeAlerts} alertSnooze={alertSnooze} setAlertSnooze={setAlertSnooze} investedAlerts={investedAlerts} setInvestedAlerts={setInvestedAlerts}/>}
         {mainTab==="todo" && <TodoTab/>}
+
+        {/* ── FINANCE TAB ── */}
+        {mainTab==="finance" && <FinanceTab prices={prices} cryptoPrices={cryptoPrices} usdvnd={usdvnd}/>}
+
+        {/* ── CREDIT CARD TAB ── */}
+        {mainTab==="card" && <CreditCardTab/>}
+
+        {/* ── EXPENSE TAB ── */}
+        {mainTab==="expense" && <ExpenseTab/>}
+
+        {/* ── LOAN TAB ── */}
+        {mainTab==="loan" && <LoanTab/>}
       </div>
     </div>
   );
