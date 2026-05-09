@@ -1740,7 +1740,7 @@ function FinanceTab({ prices, cryptoPrices, usdvnd }) {
   const activeLoans2  = loans.filter(l=>l.kyDaTra<l.soKy);
   const unpaidLoans2  = activeLoans2.filter(l=>l.paidPeriod !== mk2);
   const tongTraVay2   = unpaidLoans2.reduce((s,l)=>s+(l.soTienTraHangThang||calcEMILocal(l.soTienVay,l.laiSuat,l.soKy)),0);
-  const tongNoThe2    = cards.reduce((s,c)=>s+(c.duNo||0),0);
+  const tongNoThe2    = cards.reduce((s,c)=>s+(c.tongDuNo??c.duNo??0),0);
   const tongPhaiChi2  = tongNoThe2 + tongTraVay2 + (monthlyInvest||0) + tongChiTieu2;
   const conLai2       = tongThu2 - tongPhaiChi2;
 
@@ -2114,7 +2114,7 @@ function CreditCardTab() {
   const [editInst, setEditInst] = useState(null);
   const [instCardId, setInstCardId] = useState(null);
   const [expandedCard, setExpandedCard] = useState(null);
-  const emptyForm = {ten:"",nganHang:"",mauSac:"#3b82f6",hanMuc:"",duNo:"",ngaySaoKe:"",ngayThanhToan:"",thanhToanToiThieu:""};
+  const emptyForm = {ten:"",nganHang:"",mauSac:"#3b82f6",hanMuc:"",duNo:"",tongDuNo:"",ngaySaoKe:"",ngayThanhToan:"",thanhToanToiThieu:""};
   const emptyInstForm = {ten:"",soTienGoc:"",soKy:"",kyDaTra:"0",ngayBatDau:""};
   const [form, setForm] = useState(emptyForm);
   const [instForm, setInstForm] = useState(emptyInstForm);
@@ -2133,13 +2133,14 @@ function CreditCardTab() {
   };
 
   const openAdd = () => { setEditItem(null); setForm(emptyForm); setShowModal(true); };
-  const openEdit = c => { setEditItem(c); setForm({...c, hanMuc:String(c.hanMuc), duNo:String(c.duNo), ngaySaoKe:String(c.ngaySaoKe), ngayThanhToan:String(c.ngayThanhToan), thanhToanToiThieu:String(c.thanhToanToiThieu||0)}); setShowModal(true); };
+  const openEdit = c => { setEditItem(c); setForm({...c, hanMuc:String(c.hanMuc), duNo:String(c.duNo), tongDuNo:String(c.tongDuNo??c.duNo??""), ngaySaoKe:String(c.ngaySaoKe), ngayThanhToan:String(c.ngayThanhToan), thanhToanToiThieu:String(c.thanhToanToiThieu||0)}); setShowModal(true); };
   const save = () => {
     if (!form.ten || !form.hanMuc || !form.ngayThanhToan) return;
     const item = {
       id: editItem?.id || Date.now(),
       ten: form.ten.trim(), nganHang: form.nganHang.trim(), mauSac: form.mauSac,
       hanMuc: parseFloat(form.hanMuc), duNo: parseFloat(form.duNo)||0,
+      tongDuNo: parseFloat(form.tongDuNo)||parseFloat(form.duNo)||0,
       ngaySaoKe: parseInt(form.ngaySaoKe)||1, ngayThanhToan: parseInt(form.ngayThanhToan)||25,
       thanhToanToiThieu: parseFloat(form.thanhToanToiThieu)||0,
       paidPeriod: editItem?.paidPeriod||null,
@@ -2171,7 +2172,7 @@ function CreditCardTab() {
 
   const fVND = n => n >= 1e9 ? (n/1e9).toFixed(1)+"tỷ" : n >= 1e6 ? (n/1e6).toFixed(1)+"tr" : n.toLocaleString("vi-VN")+"đ";
   const totalLimit = cards.reduce((s,c) => s+c.hanMuc, 0);
-  const totalDebt  = cards.reduce((s,c) => s+c.duNo, 0);
+  const totalDebt  = cards.reduce((s,c) => s+(c.tongDuNo??c.duNo??0), 0);
   const tiLeTong   = totalLimit > 0 ? totalDebt/totalLimit*100 : 0;
   const COLORS = ["#3b82f6","#a855f7","#ec4899","#f59e0b","#10b981","#06b6d4","#ef4444","#64748b"];
   const unpaidCards = cards.filter(c=>!isPaid(c)).sort((a,b)=>daysUntilDue(a.ngayThanhToan)-daysUntilDue(b.ngayThanhToan));
@@ -2338,26 +2339,25 @@ function CreditCardTab() {
                   <input style={inputS} type="number" placeholder="50000000" value={form.hanMuc} onChange={e=>setForm({...form,hanMuc:e.target.value})}/>
                 </div>
                 <div>
-                  <label style={labelS}>Dư nợ hiện tại (đ)</label>
+                  <label style={labelS}>Dư nợ sao kê (đ)</label>
                   <input style={inputS} type="number" placeholder="0" value={form.duNo} onChange={e=>setForm({...form,duNo:e.target.value})}/>
                 </div>
               </div>
+              <div>
+                <label style={labelS}>Tổng dư nợ (đ) — bao gồm trả góp, phát sinh chưa sao kê</label>
+                <input style={inputS} type="number" placeholder="0" value={form.tongDuNo} onChange={e=>setForm({...form,tongDuNo:e.target.value})}/>
+              </div>
               {(() => {
                 const hl = parseFloat(form.hanMuc)||0;
-                const dn = parseFloat(form.duNo)||0;
-                const kd = hl - dn;
-                const tl = hl>0?dn/hl*100:0;
+                const td = parseFloat(form.tongDuNo)||parseFloat(form.duNo)||0;
+                const kd = hl - td;
+                const tl = hl>0?td/hl*100:0;
                 const c  = tl>70?"#f87171":tl>30?"#fbbf24":"#4ade80";
-                return (hl>0||dn>0) ? (
-                  <div style={{background:"#0f172a",borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-                    <div>
-                      <div style={{fontSize:10,color:"#475569",marginBottom:3}}>Tổng dư nợ</div>
-                      <div style={{fontWeight:700,fontSize:14,color:c}}>{fVND(dn)}</div>
-                    </div>
-                    <div style={{height:36,width:1,background:"#1e293b"}}/>
+                return (hl>0||td>0) ? (
+                  <div style={{background:"#0f172a",borderRadius:8,padding:"10px 14px",display:"flex",alignItems:"center",gap:12}}>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:10,color:"#475569",marginBottom:3}}>Hạn mức khả dụng = Hạn mức − Dư nợ</div>
-                      <div style={{fontWeight:700,fontSize:14,color:"#4ade80"}}>{fVND(kd)} <span style={{fontSize:11,color:c,fontWeight:400}}>({tl.toFixed(1)}% đã dùng)</span></div>
+                      <div style={{fontSize:10,color:"#475569",marginBottom:3}}>Hạn mức khả dụng = Hạn mức − Tổng dư nợ</div>
+                      <div style={{fontWeight:700,fontSize:15,color:"#4ade80"}}>{fVND(kd)} <span style={{fontSize:11,color:c,fontWeight:400}}>({tl.toFixed(1)}% đã dùng)</span></div>
                     </div>
                   </div>
                 ) : null;
