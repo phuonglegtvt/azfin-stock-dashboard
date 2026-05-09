@@ -2342,6 +2342,26 @@ function CreditCardTab() {
                   <input style={inputS} type="number" placeholder="0" value={form.duNo} onChange={e=>setForm({...form,duNo:e.target.value})}/>
                 </div>
               </div>
+              {(() => {
+                const hl = parseFloat(form.hanMuc)||0;
+                const dn = parseFloat(form.duNo)||0;
+                const kd = hl - dn;
+                const tl = hl>0?dn/hl*100:0;
+                const c  = tl>70?"#f87171":tl>30?"#fbbf24":"#4ade80";
+                return (hl>0||dn>0) ? (
+                  <div style={{background:"#0f172a",borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+                    <div>
+                      <div style={{fontSize:10,color:"#475569",marginBottom:3}}>Tổng dư nợ</div>
+                      <div style={{fontWeight:700,fontSize:14,color:c}}>{fVND(dn)}</div>
+                    </div>
+                    <div style={{height:36,width:1,background:"#1e293b"}}/>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:10,color:"#475569",marginBottom:3}}>Hạn mức khả dụng = Hạn mức − Dư nợ</div>
+                      <div style={{fontWeight:700,fontSize:14,color:"#4ade80"}}>{fVND(kd)} <span style={{fontSize:11,color:c,fontWeight:400}}>({tl.toFixed(1)}% đã dùng)</span></div>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <div>
                   <label style={labelS}>Ngày sao kê (1-31)</label>
