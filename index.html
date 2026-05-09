@@ -2191,9 +2191,9 @@ function CreditCardTab() {
     const cardInsts = installments.filter(x=>x.cardId===card.id);
     const totalInstRemaining = cardInsts.reduce((s,x)=>s+(x.soKy-x.kyDaTra)*(x.soTienGoc/x.soKy),0);
     const isExpanded = expandedCard === card.id;
-    const borderColor = paid ? "#334155" : urgent ? "#f87171" : card.mauSac;
+    const borderColor = paid ? "#334155" : urgent ? "#fb923c" : card.mauSac;
     return (
-      <div key={card.id} style={{background:"#1e293b",borderRadius:12,padding:"16px 20px",border:`1px solid ${urgent?"#f87171":"transparent"}`,borderLeft:`4px solid ${borderColor}`,opacity:paid?0.75:1}}>
+      <div key={card.id} style={{background:"#1e293b",borderRadius:12,padding:"16px 20px",border:`1px solid ${urgent?"#fb923c":"transparent"}`,borderLeft:`4px solid ${borderColor}`,opacity:paid?0.75:1}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:10}}>
           <div>
             <div style={{fontWeight:700,fontSize:14,color:paid?"#64748b":"#e2e8f0"}}>{card.ten}</div>
@@ -2223,16 +2223,16 @@ function CreditCardTab() {
         </div>
         <div style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:10,color:urgent?"#f87171":"#475569"}}>📄 Sao kê:</span>
-            <span style={{fontSize:12,color:urgent?"#f87171":"#94a3b8",fontWeight:600}}>Ngày {card.ngaySaoKe}</span>
+            <span style={{fontSize:10,color:urgent?"#fb923c":"#475569"}}>📄 Sao kê:</span>
+            <span style={{fontSize:12,color:urgent?"#fb923c":"#94a3b8",fontWeight:600}}>Ngày {card.ngaySaoKe}</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:10,color:urgent?"#f87171":"#475569"}}>⏰ Thanh toán:</span>
-            <span style={{fontSize:12,color:urgent?"#f87171":"#94a3b8",fontWeight:700}}>Ngày {card.ngayThanhToan}</span>
+            <span style={{fontSize:10,color:urgent?"#fb923c":"#475569"}}>⏰ Thanh toán:</span>
+            <span style={{fontSize:12,color:urgent?"#fb923c":"#94a3b8",fontWeight:700}}>Ngày {card.ngayThanhToan}</span>
           </div>
           {!paid && (
-            <div style={{marginLeft:"auto",padding:"3px 10px",borderRadius:20,background:urgent?"#7f1d1d":"#0f172a",border:`1px solid ${urgent?"#f87171":"#334155"}`}}>
-              <span style={{fontSize:11,fontWeight:700,color:urgent?"#f87171":"#94a3b8"}}>{urgent?"⚠":"⏳"} Còn {days} ngày</span>
+            <div style={{marginLeft:"auto",padding:"3px 10px",borderRadius:20,background:urgent?"#431407":"#0f172a",border:`1px solid ${urgent?"#fb923c":"#334155"}`}}>
+              <span style={{fontSize:11,fontWeight:700,color:urgent?"#fb923c":"#94a3b8"}}>{urgent?"⚠":"⏳"} Còn {days} ngày</span>
             </div>
           )}
           {card.thanhToanToiThieu > 0 && <div style={{fontSize:11,color:"#64748b"}}>Tối thiểu: {fVND(card.thanhToanToiThieu)}</div>}
@@ -2864,7 +2864,7 @@ function ExpenseTab() {
           )}
 
           {/* Fixed + Dự kiến list */}
-          <FixedSection/>
+          {FixedSection()}
           {duKienTrans.length > 0 && (
             <div style={{background:"#1e293b",borderRadius:10,padding:"12px 14px",borderLeft:"3px solid #fbbf24"}}>
               <div style={{fontSize:12,fontWeight:700,color:"#fbbf24",marginBottom:8}}>📋 Giao dịch dự kiến · {fVND(chiDuKien)}đ</div>
