@@ -1742,7 +1742,7 @@ function FinanceTab({ prices, cryptoPrices, usdvnd }) {
   const tongTraVay2   = unpaidLoans2.reduce((s,l)=>s+(l.soTienTraHangThang||calcEMILocal(l.soTienVay,l.laiSuat,l.soKy)),0);
   const getCardPeriod = (ngaySaoKe) => { const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1; if(now.getDate()>=ngaySaoKe) return `${y}-${String(m).padStart(2,'0')}`; const pm=m===1?{y:y-1,m:12}:{y,m:m-1}; return `${pm.y}-${String(pm.m).padStart(2,'0')}`; };
   const unpaidCards2  = cards.filter(c=>c.paidPeriod!==getCardPeriod(c.ngaySaoKe||1));
-  const tongNoThe2    = unpaidCards2.reduce((s,c)=>s+(c.tongDuNo??c.duNo??0),0);
+  const tongNoThe2    = unpaidCards2.reduce((s,c)=>s+(c.duNo??0),0);
   const tongPhaiChi2  = tongNoThe2 + tongTraVay2 + (monthlyInvest||0) + tongChiTieu2;
   const conLai2       = tongThu2 - tongPhaiChi2;
 
@@ -2174,12 +2174,11 @@ function CreditCardTab() {
 
   const fVND = n => n >= 1e9 ? (n/1e9).toFixed(1)+"tỷ" : n >= 1e6 ? (n/1e6).toFixed(1)+"tr" : n.toLocaleString("vi-VN")+"đ";
   const totalLimit  = cards.reduce((s,c) => s+c.hanMuc, 0);
+  const totalDebt   = cards.reduce((s,c) => s+(c.tongDuNo??c.duNo??0), 0);
+  const tiLeTong    = totalLimit > 0 ? totalDebt/totalLimit*100 : 0;
   const COLORS = ["#3b82f6","#a855f7","#ec4899","#f59e0b","#10b981","#06b6d4","#ef4444","#64748b"];
   const unpaidCards = cards.filter(c=>!isPaid(c)).sort((a,b)=>daysUntilDue(a.ngayThanhToan)-daysUntilDue(b.ngayThanhToan));
   const paidCards   = cards.filter(c=>isPaid(c));
-  // Tổng dư nợ = sum duNo của thẻ chưa thanh toán (như hiển thị "Dư nợ" trên mỗi card)
-  const totalDebt   = unpaidCards.reduce((s,c) => s+(c.duNo??0), 0);
-  const tiLeTong    = totalLimit > 0 ? totalDebt/totalLimit*100 : 0;
 
   const renderCard = (card) => {
     const tongDuNo = card.tongDuNo ?? card.duNo ?? 0;
