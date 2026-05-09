@@ -2185,14 +2185,15 @@ function CreditCardTab() {
     const tiLe = card.hanMuc > 0 ? tongDuNo/card.hanMuc*100 : 0;
     const barC = tiLe>70?"#f87171":tiLe>30?"#fbbf24":"#4ade80";
     const days = daysUntilDue(card.ngayThanhToan);
-    const urgent = days <= 7;
+    const urgent = !paid && days <= 11;
     const paid = isPaid(card);
     const khaDung = card.hanMuc - tongDuNo;
     const cardInsts = installments.filter(x=>x.cardId===card.id);
     const totalInstRemaining = cardInsts.reduce((s,x)=>s+(x.soKy-x.kyDaTra)*(x.soTienGoc/x.soKy),0);
     const isExpanded = expandedCard === card.id;
+    const borderColor = paid ? "#334155" : urgent ? "#f87171" : card.mauSac;
     return (
-      <div key={card.id} style={{background:"#1e293b",borderRadius:12,padding:"16px 20px",borderLeft:`4px solid ${paid?"#334155":card.mauSac}`,opacity:paid?0.75:1}}>
+      <div key={card.id} style={{background:"#1e293b",borderRadius:12,padding:"16px 20px",border:`1px solid ${urgent?"#f87171":"transparent"}`,borderLeft:`4px solid ${borderColor}`,opacity:paid?0.75:1}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:10}}>
           <div>
             <div style={{fontWeight:700,fontSize:14,color:paid?"#64748b":"#e2e8f0"}}>{card.ten}</div>
@@ -2222,12 +2223,12 @@ function CreditCardTab() {
         </div>
         <div style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:10,color:"#475569"}}>📄 Sao kê:</span>
-            <span style={{fontSize:12,color:"#94a3b8",fontWeight:600}}>Ngày {card.ngaySaoKe}</span>
+            <span style={{fontSize:10,color:urgent?"#f87171":"#475569"}}>📄 Sao kê:</span>
+            <span style={{fontSize:12,color:urgent?"#f87171":"#94a3b8",fontWeight:600}}>Ngày {card.ngaySaoKe}</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:10,color:"#475569"}}>⏰ Thanh toán:</span>
-            <span style={{fontSize:12,color:"#94a3b8",fontWeight:600}}>Ngày {card.ngayThanhToan}</span>
+            <span style={{fontSize:10,color:urgent?"#f87171":"#475569"}}>⏰ Thanh toán:</span>
+            <span style={{fontSize:12,color:urgent?"#f87171":"#94a3b8",fontWeight:700}}>Ngày {card.ngayThanhToan}</span>
           </div>
           {!paid && (
             <div style={{marginLeft:"auto",padding:"3px 10px",borderRadius:20,background:urgent?"#7f1d1d":"#0f172a",border:`1px solid ${urgent?"#f87171":"#334155"}`}}>
