@@ -1740,7 +1740,9 @@ function FinanceTab({ prices, cryptoPrices, usdvnd }) {
   const activeLoans2  = loans.filter(l=>l.kyDaTra<l.soKy);
   const unpaidLoans2  = activeLoans2.filter(l=>l.paidPeriod !== mk2);
   const tongTraVay2   = unpaidLoans2.reduce((s,l)=>s+(l.soTienTraHangThang||calcEMILocal(l.soTienVay,l.laiSuat,l.soKy)),0);
-  const tongNoThe2    = cards.reduce((s,c)=>s+(c.tongDuNo??c.duNo??0),0);
+  const getCardPeriod = (ngaySaoKe) => { const now=new Date(),y=now.getFullYear(),m=now.getMonth()+1; if(now.getDate()>=ngaySaoKe) return `${y}-${String(m).padStart(2,'0')}`; const pm=m===1?{y:y-1,m:12}:{y,m:m-1}; return `${pm.y}-${String(pm.m).padStart(2,'0')}`; };
+  const unpaidCards2  = cards.filter(c=>c.paidPeriod!==getCardPeriod(c.ngaySaoKe||1));
+  const tongNoThe2    = unpaidCards2.reduce((s,c)=>s+(c.tongDuNo??c.duNo??0),0);
   const tongPhaiChi2  = tongNoThe2 + tongTraVay2 + (monthlyInvest||0) + tongChiTieu2;
   const conLai2       = tongThu2 - tongPhaiChi2;
 
