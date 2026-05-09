@@ -1738,7 +1738,8 @@ function FinanceTab({ prices, cryptoPrices, usdvnd }) {
   const chiPhatSinh2  = transactions.filter(t=>t.loai==="chi"&&t.ngay?.startsWith(mk2)).reduce((s,t)=>s+t.soTien,0);
   const tongChiTieu2  = chiFixed2 + chiPhatSinh2;
   const activeLoans2  = loans.filter(l=>l.kyDaTra<l.soKy);
-  const tongTraVay2   = activeLoans2.reduce((s,l)=>s+(l.soTienTraHangThang||calcEMILocal(l.soTienVay,l.laiSuat,l.soKy)),0);
+  const unpaidLoans2  = activeLoans2.filter(l=>l.paidPeriod !== mk2);
+  const tongTraVay2   = unpaidLoans2.reduce((s,l)=>s+(l.soTienTraHangThang||calcEMILocal(l.soTienVay,l.laiSuat,l.soKy)),0);
   const tongNoThe2    = cards.reduce((s,c)=>s+(c.duNo||0),0);
   const tongPhaiChi2  = tongNoThe2 + tongTraVay2 + (monthlyInvest||0) + tongChiTieu2;
   const conLai2       = tongThu2 - tongPhaiChi2;
@@ -2287,7 +2288,7 @@ function CreditCardTab() {
             {l:"Số thẻ",           v:cards.length+"",           unit:"thẻ", c:"#38bdf8"},
             {l:"Tổng hạn mức",     v:fVND(totalLimit),          unit:"",    c:"#94a3b8"},
             {l:"Tổng dư nợ",       v:fVND(totalDebt),           unit:"",    c:tiLeTong>70?"#f87171":tiLeTong>30?"#fbbf24":"#4ade80"},
-            {l:"Hạn mức khả dụng", v:fVND(totalLimit-totalDebt),unit:"",    c:"#4ade80"},
+            {l:"Hạn mức còn lại",  v:fVND(totalLimit-totalDebt),unit:"",    c:"#4ade80"},
           ].map(({l,v,unit,c}) => (
             <div key={l} style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",borderTop:`3px solid ${c}`}}>
               <div style={{fontSize:10,color:"#475569",marginBottom:4}}>{l}</div>
@@ -2685,7 +2686,7 @@ function ExpenseTab() {
       {/* ══ DIARY VIEW ══ */}
       {viewMode==="diary" && (
         <div>
-          <FullForm/>
+          {FullForm()}
 
           {/* Diary entries grouped by date */}
           {diaryDays.length === 0 ? (
@@ -2765,7 +2766,7 @@ function ExpenseTab() {
       {/* ══ SUMMARY VIEW ══ */}
       {viewMode==="summary" && (
         <div>
-          <FullForm/>
+          {FullForm()}
 
           {/* Summary row: thu nhập (editable) */}
           <div style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",marginBottom:10}}>
