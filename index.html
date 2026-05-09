@@ -2898,11 +2898,18 @@ function LoanTab() {
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
   };
   const isPaidLoan = loan => {
-    if (loan.paidPeriod !== getLoanPeriod()) return false;
-    const nextDate = getNextPaymentDate(loan);
-    const du = daysUntil(nextDate);
-    if (du !== null && du <= 15) return false;
-    return true;
+    const period = getLoanPeriod();
+    if (loan.paidPeriod !== period) return false;
+    if (!loan.ngayTraHangThang) return true;
+    // Check 7 days before NEXT period's payment (not current month's)
+    const [y, m] = period.split('-').map(Number);
+    let nextM = m + 1, nextY = y;
+    if (nextM > 12) { nextM = 1; nextY++; }
+    const day = parseInt(loan.ngayTraHangThang);
+    const lastDay = new Date(nextY, nextM, 0).getDate();
+    const nextPeriodDate = new Date(nextY, nextM - 1, Math.min(day, lastDay));
+    const du = daysUntil(nextPeriodDate);
+    return du === null || du > 7;
   };
 
   const getNextPaymentDate = loan => {
@@ -2916,6 +2923,16 @@ function LoanTab() {
     }
     const lastDay = new Date(year, month+1, 0).getDate();
     return new Date(year, month, Math.min(day, lastDay));
+  };
+  const getNextPeriodPaymentDate = loan => {
+    if (!loan.ngayTraHangThang) return null;
+    const period = getLoanPeriod();
+    const [y, m] = period.split('-').map(Number);
+    let nextM = m + 1, nextY = y;
+    if (nextM > 12) { nextM = 1; nextY++; }
+    const day = parseInt(loan.ngayTraHangThang);
+    const lastDay = new Date(nextY, nextM, 0).getDate();
+    return new Date(nextY, nextM - 1, Math.min(day, lastDay));
   };
   const fDate = d => d ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}` : null;
   const daysUntil = d => { if(!d) return null; const t=new Date(); t.setHours(0,0,0,0); return Math.round((d-t)/(864e5)); };
@@ -2955,21 +2972,29 @@ function LoanTab() {
     const du = daysUntil(nextDate);
     const nextStr = fDate(nextDate);
 
-    if (compact) return (
-      <div key={loan.id} style={{background:"#1e293b",borderRadius:10,padding:"12px 16px",borderLeft:`4px solid ${t.c}`,opacity:0.65,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:12,color:"#4ade80"}}>✓</span>
-        <div style={{flex:1,minWidth:0}}>
-          <span style={{fontSize:13,color:"#64748b",fontWeight:600}}>{loan.ten}</span>
-          <span style={{fontSize:11,color:"#334155",marginLeft:8}}>{t.l}{loan.nganHang?` · ${loan.nganHang}`:""}</span>
-          <span style={{fontSize:11,color:"#4ade80",marginLeft:8}}>✓ Kỳ {loan.kyDaTra}/{loan.soKy}</span>
-          {nextStr && <span style={{fontSize:10,color:"#475569",marginLeft:8}}>Kỳ sau: {nextStr}</span>}
+    if (compact) {
+      const nextPeriodDate = getNextPeriodPaymentDate(loan);
+      const nextPeriodStr  = fDate(nextPeriodDate);
+      const duNext         = daysUntil(nextPeriodDate);
+      return (
+        <div key={loan.id} style={{background:"#071a0f",borderRadius:10,padding:"12px 16px",border:"1px solid #166534",borderLeft:`4px solid ${t.c}`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:3}}>
+              <span style={{fontSize:13,color:"#cbd5e1",fontWeight:600}}>{loan.ten}</span>
+              <span style={{background:"#166534",color:"#4ade80",border:"1px solid #4ade80",borderRadius:12,padding:"1px 8px",fontSize:10,fontWeight:700}}>✅ Đã thanh toán</span>
+            </div>
+            <div style={{fontSize:11,color:"#475569"}}>
+              {t.l}{loan.nganHang?` · ${loan.nganHang}`:""} · Kỳ {loan.kyDaTra}/{loan.soKy}
+              {nextPeriodStr && <span style={{marginLeft:8}}>· Kỳ sau: {nextPeriodStr}{duNext!==null?` (${duNext}n)`:""}</span>}
+            </div>
+          </div>
+          <span style={{fontSize:11,color:"#f87171",fontWeight:600}}>{fVND(remaining)}</span>
+          <button onClick={()=>undoPayment(loan)} style={{background:"#0f172a",border:"1px solid #334155",color:"#f59e0b",borderRadius:6,padding:"3px 7px",cursor:"pointer",fontSize:10}} title="Hoàn tác thanh toán">↩</button>
+          <button onClick={()=>openEdit(loan)} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:13}}>✎</button>
+          <button onClick={()=>del(loan.id)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:16}}>×</button>
         </div>
-        <span style={{fontSize:11,color:"#f87171",fontWeight:600}}>{fVND(remaining)}</span>
-        <button onClick={()=>undoPayment(loan)} style={{background:"#0f172a",border:"1px solid #334155",color:"#f59e0b",borderRadius:6,padding:"3px 7px",cursor:"pointer",fontSize:10}} title="Hoàn tác thanh toán">↩</button>
-        <button onClick={()=>openEdit(loan)} style={{background:"none",border:"none",color:"#64748b",cursor:"pointer",fontSize:13}}>✎</button>
-        <button onClick={()=>del(loan.id)} style={{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:16}}>×</button>
-      </div>
-    );
+      );
+    }
 
     let dueBg="#1e293b", dueColor="#64748b";
     if (du !== null) { if (du<=0){dueBg="#450a0a";dueColor="#f87171";}else if(du<=3){dueBg="#451a03";dueColor="#fbbf24";}else if(du<=7){dueBg="#1c1917";dueColor="#fbbf24";} }
