@@ -2179,12 +2179,13 @@ function CreditCardTab() {
   const paidCards   = cards.filter(c=>isPaid(c));
 
   const renderCard = (card) => {
-    const tiLe = card.hanMuc > 0 ? card.duNo/card.hanMuc*100 : 0;
+    const tongDuNo = card.tongDuNo ?? card.duNo ?? 0;
+    const tiLe = card.hanMuc > 0 ? tongDuNo/card.hanMuc*100 : 0;
     const barC = tiLe>70?"#f87171":tiLe>30?"#fbbf24":"#4ade80";
     const days = daysUntilDue(card.ngayThanhToan);
     const urgent = days <= 7;
     const paid = isPaid(card);
-    const khaDung = card.hanMuc - card.duNo;
+    const khaDung = card.hanMuc - tongDuNo;
     const cardInsts = installments.filter(x=>x.cardId===card.id);
     const totalInstRemaining = cardInsts.reduce((s,x)=>s+(x.soKy-x.kyDaTra)*(x.soTienGoc/x.soKy),0);
     const isExpanded = expandedCard === card.id;
