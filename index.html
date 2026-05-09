@@ -2173,12 +2173,13 @@ function CreditCardTab() {
   };
 
   const fVND = n => n >= 1e9 ? (n/1e9).toFixed(1)+"tỷ" : n >= 1e6 ? (n/1e6).toFixed(1)+"tr" : n.toLocaleString("vi-VN")+"đ";
-  const totalLimit = cards.reduce((s,c) => s+c.hanMuc, 0);
-  const totalDebt  = cards.reduce((s,c) => s+(c.tongDuNo??c.duNo??0), 0);
-  const tiLeTong   = totalLimit > 0 ? totalDebt/totalLimit*100 : 0;
+  const totalLimit  = cards.reduce((s,c) => s+c.hanMuc, 0);
   const COLORS = ["#3b82f6","#a855f7","#ec4899","#f59e0b","#10b981","#06b6d4","#ef4444","#64748b"];
   const unpaidCards = cards.filter(c=>!isPaid(c)).sort((a,b)=>daysUntilDue(a.ngayThanhToan)-daysUntilDue(b.ngayThanhToan));
   const paidCards   = cards.filter(c=>isPaid(c));
+  // Tổng dư nợ = sum duNo của thẻ chưa thanh toán (như hiển thị "Dư nợ" trên mỗi card)
+  const totalDebt   = unpaidCards.reduce((s,c) => s+(c.duNo??0), 0);
+  const tiLeTong    = totalLimit > 0 ? totalDebt/totalLimit*100 : 0;
 
   const renderCard = (card) => {
     const tongDuNo = card.tongDuNo ?? card.duNo ?? 0;
