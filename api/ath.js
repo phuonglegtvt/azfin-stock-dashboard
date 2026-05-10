@@ -4,7 +4,7 @@ const SYMBOLS = [
   "LHG","VHC","HCM","VCI","HAX","VCS","DHG","FPT","DHC","HDG",
   "REE","MWG","PTB","QNS","PHR","BWE","DPR","PNJ","VSC","IMP",
   "POW","TDM","PVS","DGC","HND","SIP","VNM","VEA","QTP","IDC",
-  "NT2","BMP","GAS","PLX","PVT","DCM","DPM",
+  "NT2","BMP","GAS","PLX","PVT","DCM","DPM","SGB","PHC",
   "E1VFVN30","FUEVFVND","FUEVN100","FUESSVFL","FUEDCMID"
 ];
 

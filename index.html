@@ -755,9 +755,9 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
   const [priceSource, setPriceSource] = useState(null);
   const [loading, setLoading] = useState(false);
   const [editCoin, setEditCoin] = useState(null);
-  const [form, setForm] = useState({soLuong:"",giaMuaTB:"",gridProfit:""});
+  const [form, setForm] = useState({soLuong:"",giaMuaTB:"",gridProfit:"",vonOverride:"",htOverride:""});
   const [editSpotCoin, setEditSpotCoin] = useState(null);
-  const [spotForm, setSpotForm] = useState({soLuong:"",giaMuaTB:"",gridProfit:""});
+  const [spotForm, setSpotForm] = useState({soLuong:"",giaMuaTB:"",gridProfit:"",vonOverride:"",htOverride:""});
 
   const loadPrices = useCallback(async () => {
     setLoading(true);
@@ -781,10 +781,13 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
     const hc = h[c.id] || {};
     const price = cryptoPrices[c.id]?.price || 0;
     const change24h = cryptoPrices[c.id]?.change24h || 0;
-    const vonUSD = hc.soLuong * hc.giaMuaTB;
-    const htUSD  = hc.soLuong * price;
-    const pnlUSD = price > 0 ? htUSD - vonUSD : 0;
-    const pnlPct = vonUSD > 0 && price > 0 ? (pnlUSD/vonUSD*100).toFixed(2) : null;
+    const vonAuto = (hc.soLuong||0) * (hc.giaMuaTB||0);
+    const htAuto  = (hc.soLuong||0) * price;
+    const vonUSD  = hc.vonOverride != null ? hc.vonOverride : vonAuto;
+    const htUSD   = hc.htOverride  != null ? hc.htOverride  : (price > 0 ? htAuto : 0);
+    const hasPnl  = htUSD > 0 || hc.htOverride != null;
+    const pnlUSD  = hasPnl ? htUSD - vonUSD : 0;
+    const pnlPct  = vonUSD > 0 && hasPnl ? (pnlUSD/vonUSD*100).toFixed(2) : null;
     const gridVND = (hc.gridProfit||0) * usdvnd;
     return {...c, ...hc, price, change24h, vonUSD, htUSD, pnlUSD, pnlPct, gridVND, ath: cryptoAth[c.id] || 0};
   });
@@ -793,11 +796,11 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
   const spotRows = buildRows(spotHoldings);
 
   const totalVon     = rows.reduce((a,r)=>a+r.vonUSD,0);
-  const totalHT      = rows.reduce((a,r)=>a+(r.price>0?r.htUSD:r.vonUSD),0);
+  const totalHT      = rows.reduce((a,r)=>a+(r.htUSD>0?r.htUSD:r.vonUSD),0);
   const totalPnl     = totalHT - totalVon;
   const totalGrid    = rows.reduce((a,r)=>a+(r.gridProfit||0),0);
   const spotTotalVon = spotRows.reduce((a,r)=>a+r.vonUSD,0);
-  const spotTotalHT  = spotRows.reduce((a,r)=>a+(r.price>0?r.htUSD:r.vonUSD),0);
+  const spotTotalHT  = spotRows.reduce((a,r)=>a+(r.htUSD>0?r.htUSD:r.vonUSD),0);
   const spotTotalPnl = spotTotalHT - spotTotalVon;
   const spotTotalGrid= spotRows.reduce((a,r)=>a+(r.gridProfit||0),0);
 
@@ -809,10 +812,11 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
     color:c.color
   })).filter(s=>s.value>0);
 
-  const openEdit     = coin => { setEditCoin(coin.id);     const h=holdings[coin.id]||{};     setForm({soLuong:String(h.soLuong||0),giaMuaTB:String(h.giaMuaTB||0),gridProfit:String(h.gridProfit||0)}); };
-  const saveHolding  = () => { setHoldings({...holdings,[editCoin]:{soLuong:parseFloat(form.soLuong)||0,giaMuaTB:parseFloat(form.giaMuaTB)||0,gridProfit:parseFloat(form.gridProfit)||0}}); setEditCoin(null); };
-  const openSpotEdit = coin => { setEditSpotCoin(coin.id); const h=spotHoldings[coin.id]||{}; setSpotForm({soLuong:String(h.soLuong||0),giaMuaTB:String(h.giaMuaTB||0),gridProfit:String(h.gridProfit||0)}); };
-  const saveSpot     = () => { setSpotHoldings({...spotHoldings,[editSpotCoin]:{soLuong:parseFloat(spotForm.soLuong)||0,giaMuaTB:parseFloat(spotForm.giaMuaTB)||0,gridProfit:parseFloat(spotForm.gridProfit)||0}}); setEditSpotCoin(null); };
+  const parseOvr = v => (v!=null&&String(v).trim()!=="")?parseFloat(v):null;
+  const openEdit     = coin => { setEditCoin(coin.id);     const h=holdings[coin.id]||{};     setForm({soLuong:String(h.soLuong||0),giaMuaTB:String(h.giaMuaTB||0),gridProfit:String(h.gridProfit||0),vonOverride:h.vonOverride!=null?String(h.vonOverride):"",htOverride:h.htOverride!=null?String(h.htOverride):""}); };
+  const saveHolding  = () => { setHoldings({...holdings,[editCoin]:{soLuong:parseFloat(form.soLuong)||0,giaMuaTB:parseFloat(form.giaMuaTB)||0,gridProfit:parseFloat(form.gridProfit)||0,vonOverride:parseOvr(form.vonOverride),htOverride:parseOvr(form.htOverride)}}); setEditCoin(null); };
+  const openSpotEdit = coin => { setEditSpotCoin(coin.id); const h=spotHoldings[coin.id]||{}; setSpotForm({soLuong:String(h.soLuong||0),giaMuaTB:String(h.giaMuaTB||0),gridProfit:String(h.gridProfit||0),vonOverride:h.vonOverride!=null?String(h.vonOverride):"",htOverride:h.htOverride!=null?String(h.htOverride):""}); };
+  const saveSpot     = () => { setSpotHoldings({...spotHoldings,[editSpotCoin]:{soLuong:parseFloat(spotForm.soLuong)||0,giaMuaTB:parseFloat(spotForm.giaMuaTB)||0,gridProfit:parseFloat(spotForm.gridProfit)||0,vonOverride:parseOvr(spotForm.vonOverride),htOverride:parseOvr(spotForm.htOverride)}}); setEditSpotCoin(null); };
 
   const SummaryCards = ({cards}) => (
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
@@ -855,8 +859,12 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
               <td style={{padding:"8px 12px",color:pctColor(r.change24h),fontWeight:700}}>
                 {r.change24h?(r.change24h>=0?"+":"")+r.change24h.toFixed(2)+"%":"—"}
               </td>
-              <td style={{padding:"8px 12px",color:"#94a3b8"}}>{r.vonUSD?fUSD(r.vonUSD):"—"}</td>
-              <td style={{padding:"8px 12px",color:"#e2e8f0"}}>{r.price&&r.soLuong?fUSD(r.htUSD):"—"}</td>
+              <td style={{padding:"8px 12px",color:"#94a3b8"}}>
+                {r.vonUSD>0?<>{fUSD(r.vonUSD)}{r.vonOverride!=null&&<span style={{fontSize:8,color:"#fbbf24",marginLeft:3}}>✏</span>}</>:"—"}
+              </td>
+              <td style={{padding:"8px 12px",color:"#e2e8f0"}}>
+                {r.htUSD>0?<>{fUSD(r.htUSD)}{r.htOverride!=null&&<span style={{fontSize:8,color:"#fbbf24",marginLeft:3}}>✏</span>}</>:"—"}
+              </td>
               <td style={{padding:"8px 12px",color:pctColor(r.pnlUSD),fontWeight:700}}>
                 {r.pnlPct!==null?(r.pnlUSD>=0?"+":"")+fUSD(r.pnlUSD):"—"}
               </td>
@@ -942,11 +950,20 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
           <div className="modal-box" onClick={e=>e.stopPropagation()}>
             <h3 style={{color:COINS_DEF.find(c=>c.id===editCoin)?.color||"#38bdf8",marginBottom:4,fontSize:15}}>🤖 Future — {editCoin}</h3>
             {[{l:"Số lượng coin",k:"soLuong",p:"VD: 0.05"},{l:"Giá mua TB (USD)",k:"giaMuaTB",p:"VD: 60000"},{l:"Grid Profit (USD)",k:"gridProfit",p:"VD: 150"}].map(f=>(
-              <div key={f.k} style={{marginBottom:12}}>
+              <div key={f.k} style={{marginBottom:10}}>
                 <label style={labelS}>{f.l}</label>
                 <input style={inputS} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p} type="number"/>
               </div>
             ))}
+            <div style={{borderTop:"1px solid #1e293b",margin:"10px 0 8px",paddingTop:10}}>
+              <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>✏ Ghi đè thủ công — để trống sẽ tự tính</div>
+              {[{l:"Vốn (USD)",k:"vonOverride"},{l:"Giá trị HT (USD)",k:"htOverride"}].map(f=>(
+                <div key={f.k} style={{marginBottom:10}}>
+                  <label style={labelS}>{f.l}</label>
+                  <input style={{...inputS,borderColor:form[f.k]?"#fbbf24":"#1e293b"}} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder="Để trống = tự tính" type="number"/>
+                </div>
+              ))}
+            </div>
             <div style={{display:"flex",gap:8,marginTop:4}}>
               <button onClick={saveHolding} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#7c3aed,#3b82f6)",color:"#fff",fontWeight:700,cursor:"pointer"}}>Lưu</button>
               <button onClick={()=>setEditCoin(null)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
@@ -961,11 +978,20 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
           <div className="modal-box" onClick={e=>e.stopPropagation()}>
             <h3 style={{color:COINS_DEF.find(c=>c.id===editSpotCoin)?.color||"#4ade80",marginBottom:4,fontSize:15}}>🟢 Spot — {editSpotCoin}</h3>
             {[{l:"Số lượng coin",k:"soLuong",p:"VD: 0.05"},{l:"Giá mua TB (USD)",k:"giaMuaTB",p:"VD: 60000"},{l:"Grid Profit (USD)",k:"gridProfit",p:"VD: 150"}].map(f=>(
-              <div key={f.k} style={{marginBottom:12}}>
+              <div key={f.k} style={{marginBottom:10}}>
                 <label style={labelS}>{f.l}</label>
                 <input style={inputS} value={spotForm[f.k]} onChange={e=>setSpotForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p} type="number"/>
               </div>
             ))}
+            <div style={{borderTop:"1px solid #1e293b",margin:"10px 0 8px",paddingTop:10}}>
+              <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>✏ Ghi đè thủ công — để trống sẽ tự tính</div>
+              {[{l:"Vốn (USD)",k:"vonOverride"},{l:"Giá trị HT (USD)",k:"htOverride"}].map(f=>(
+                <div key={f.k} style={{marginBottom:10}}>
+                  <label style={labelS}>{f.l}</label>
+                  <input style={{...inputS,borderColor:spotForm[f.k]?"#fbbf24":"#1e293b"}} value={spotForm[f.k]} onChange={e=>setSpotForm(p=>({...p,[f.k]:e.target.value}))} placeholder="Để trống = tự tính" type="number"/>
+                </div>
+              ))}
+            </div>
             <div style={{display:"flex",gap:8,marginTop:4}}>
               <button onClick={saveSpot} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#065f46,#4ade80)",color:"#fff",fontWeight:700,cursor:"pointer"}}>Lưu</button>
               <button onClick={()=>setEditSpotCoin(null)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
