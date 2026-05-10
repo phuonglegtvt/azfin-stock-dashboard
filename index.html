@@ -748,16 +748,22 @@ function StockPortfolio({ prices }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── SECTION: Crypto Portfolio ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
+const parseOvr = v => (v!=null&&String(v).trim()!=="")?parseFloat(v):null;
+const getRecs = raw => Array.isArray(raw) ? raw : (raw && (raw.soLuong||raw.giaMuaTB||raw.gridProfit) ? [{id:1,soLuong:raw.soLuong||0,giaMuaTB:raw.giaMuaTB||0,gridProfit:raw.gridProfit||0,vonOverride:raw.vonOverride??null,htOverride:raw.htOverride??null,ghiChu:""}] : []);
 function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCryptoAth }) {
-  const emptyHoldings = COINS_DEF.reduce((acc,c) => ({...acc,[c.id]:{soLuong:0,giaMuaTB:0,gridProfit:0}}),{});
+  const emptyHoldings = COINS_DEF.reduce((acc,c) => ({...acc,[c.id]:[]}),{});
   const [holdings, setHoldings] = useLS("azfin_crypto_holdings", emptyHoldings);
   const [spotHoldings, setSpotHoldings] = useLS("azfin_crypto_spot_holdings", emptyHoldings);
   const [priceSource, setPriceSource] = useState(null);
   const [loading, setLoading] = useState(false);
   const [editCoin, setEditCoin] = useState(null);
-  const [form, setForm] = useState({soLuong:"",giaMuaTB:"",gridProfit:"",vonOverride:"",htOverride:""});
+  const [formRecords, setFormRecords] = useState([]);
   const [editSpotCoin, setEditSpotCoin] = useState(null);
-  const [spotForm, setSpotForm] = useState({soLuong:"",giaMuaTB:"",gridProfit:"",vonOverride:"",htOverride:""});
+  const [spotFormRecords, setSpotFormRecords] = useState([]);
+
+  const emptyRec = () => ({id:Date.now()+(Math.random()*999|0),soLuong:"",giaMuaTB:"",gridProfit:"",vonOverride:"",htOverride:"",ghiChu:""});
+  const toFormRec = r => ({id:r.id||Date.now(),soLuong:String(r.soLuong||""),giaMuaTB:String(r.giaMuaTB||""),gridProfit:String(r.gridProfit||""),vonOverride:r.vonOverride!=null?String(r.vonOverride):"",htOverride:r.htOverride!=null?String(r.htOverride):"",ghiChu:r.ghiChu||""});
+  const saveRecs = recs => recs.map(r=>({id:r.id,soLuong:parseFloat(r.soLuong)||0,giaMuaTB:parseFloat(r.giaMuaTB)||0,gridProfit:parseFloat(r.gridProfit)||0,vonOverride:parseOvr(r.vonOverride),htOverride:parseOvr(r.htOverride),ghiChu:r.ghiChu||""}));
 
   const loadPrices = useCallback(async () => {
     setLoading(true);
@@ -778,18 +784,22 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
   useEffect(() => { loadPrices(); const t=setInterval(loadPrices, 60000); return ()=>clearInterval(t); }, []);
 
   const buildRows = (h) => COINS_DEF.map(c => {
-    const hc = h[c.id] || {};
+    const recs = getRecs(h[c.id]);
     const price = cryptoPrices[c.id]?.price || 0;
     const change24h = cryptoPrices[c.id]?.change24h || 0;
-    const vonAuto = (hc.soLuong||0) * (hc.giaMuaTB||0);
-    const htAuto  = (hc.soLuong||0) * price;
-    const vonUSD  = hc.vonOverride != null ? hc.vonOverride : vonAuto;
-    const htUSD   = hc.htOverride  != null ? hc.htOverride  : (price > 0 ? htAuto : 0);
-    const hasPnl  = htUSD > 0 || hc.htOverride != null;
-    const pnlUSD  = hasPnl ? htUSD - vonUSD : 0;
-    const pnlPct  = vonUSD > 0 && hasPnl ? (pnlUSD/vonUSD*100).toFixed(2) : null;
-    const gridVND = (hc.gridProfit||0) * usdvnd;
-    return {...c, ...hc, price, change24h, vonUSD, htUSD, pnlUSD, pnlPct, gridVND, ath: cryptoAth[c.id] || 0};
+    const soLuong = recs.reduce((a,r)=>a+(r.soLuong||0),0);
+    const gridProfit = recs.reduce((a,r)=>a+(r.gridProfit||0),0);
+    const vonAuto = recs.reduce((a,r)=>a+(r.soLuong||0)*(r.giaMuaTB||0),0);
+    const vonUSD = recs.reduce((a,r)=>a+(r.vonOverride!=null?r.vonOverride:(r.soLuong||0)*(r.giaMuaTB||0)),0);
+    const htUSD = price>0 ? recs.reduce((a,r)=>a+(r.htOverride!=null?r.htOverride:(r.soLuong||0)*price),0) : 0;
+    const hasVonOverride = recs.some(r=>r.vonOverride!=null);
+    const hasHtOverride = recs.some(r=>r.htOverride!=null);
+    const giaMuaTB = soLuong>0 ? vonAuto/soLuong : 0;
+    const hasPnl = htUSD>0 || hasHtOverride;
+    const pnlUSD = hasPnl ? htUSD-vonUSD : 0;
+    const pnlPct = vonUSD>0&&hasPnl ? (pnlUSD/vonUSD*100).toFixed(2) : null;
+    const gridVND = gridProfit*usdvnd;
+    return {...c, recs, soLuong, giaMuaTB, gridProfit, price, change24h, vonUSD, htUSD, pnlUSD, pnlPct, gridVND, hasVonOverride, hasHtOverride, ath:cryptoAth[c.id]||0};
   });
 
   const rows     = buildRows(holdings);
@@ -812,11 +822,16 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
     color:c.color
   })).filter(s=>s.value>0);
 
-  const parseOvr = v => (v!=null&&String(v).trim()!=="")?parseFloat(v):null;
-  const openEdit     = coin => { setEditCoin(coin.id);     const h=holdings[coin.id]||{};     setForm({soLuong:String(h.soLuong||0),giaMuaTB:String(h.giaMuaTB||0),gridProfit:String(h.gridProfit||0),vonOverride:h.vonOverride!=null?String(h.vonOverride):"",htOverride:h.htOverride!=null?String(h.htOverride):""}); };
-  const saveHolding  = () => { setHoldings({...holdings,[editCoin]:{soLuong:parseFloat(form.soLuong)||0,giaMuaTB:parseFloat(form.giaMuaTB)||0,gridProfit:parseFloat(form.gridProfit)||0,vonOverride:parseOvr(form.vonOverride),htOverride:parseOvr(form.htOverride)}}); setEditCoin(null); };
-  const openSpotEdit = coin => { setEditSpotCoin(coin.id); const h=spotHoldings[coin.id]||{}; setSpotForm({soLuong:String(h.soLuong||0),giaMuaTB:String(h.giaMuaTB||0),gridProfit:String(h.gridProfit||0),vonOverride:h.vonOverride!=null?String(h.vonOverride):"",htOverride:h.htOverride!=null?String(h.htOverride):""}); };
-  const saveSpot     = () => { setSpotHoldings({...spotHoldings,[editSpotCoin]:{soLuong:parseFloat(spotForm.soLuong)||0,giaMuaTB:parseFloat(spotForm.giaMuaTB)||0,gridProfit:parseFloat(spotForm.gridProfit)||0,vonOverride:parseOvr(spotForm.vonOverride),htOverride:parseOvr(spotForm.htOverride)}}); setEditSpotCoin(null); };
+  const updFormRec = (id,k,v) => setFormRecords(p=>p.map(r=>r.id===id?{...r,[k]:v}:r));
+  const addFormRec = () => setFormRecords(p=>[...p,emptyRec()]);
+  const delFormRec = id => setFormRecords(p=>p.filter(r=>r.id!==id));
+  const updSpotRec = (id,k,v) => setSpotFormRecords(p=>p.map(r=>r.id===id?{...r,[k]:v}:r));
+  const addSpotRec = () => setSpotFormRecords(p=>[...p,emptyRec()]);
+  const delSpotRec = id => setSpotFormRecords(p=>p.filter(r=>r.id!==id));
+  const openEdit = coin => { setEditCoin(coin.id); const recs=getRecs(holdings[coin.id]); setFormRecords(recs.length>0?recs.map(toFormRec):[emptyRec()]); };
+  const saveHolding = () => { setHoldings({...holdings,[editCoin]:saveRecs(formRecords)}); setEditCoin(null); };
+  const openSpotEdit = coin => { setEditSpotCoin(coin.id); const recs=getRecs(spotHoldings[coin.id]); setSpotFormRecords(recs.length>0?recs.map(toFormRec):[emptyRec()]); };
+  const saveSpot = () => { setSpotHoldings({...spotHoldings,[editSpotCoin]:saveRecs(spotFormRecords)}); setEditSpotCoin(null); };
 
   const SummaryCards = ({cards}) => (
     <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
@@ -860,10 +875,10 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
                 {r.change24h?(r.change24h>=0?"+":"")+r.change24h.toFixed(2)+"%":"—"}
               </td>
               <td style={{padding:"8px 12px",color:"#94a3b8"}}>
-                {r.vonUSD>0?<>{fUSD(r.vonUSD)}{r.vonOverride!=null&&<span style={{fontSize:8,color:"#fbbf24",marginLeft:3}}>✏</span>}</>:"—"}
+                {r.vonUSD>0?<>{fUSD(r.vonUSD)}{r.hasVonOverride&&<span style={{fontSize:8,color:"#fbbf24",marginLeft:3}}>✏</span>}</>:"—"}
               </td>
               <td style={{padding:"8px 12px",color:"#e2e8f0"}}>
-                {r.htUSD>0?<>{fUSD(r.htUSD)}{r.htOverride!=null&&<span style={{fontSize:8,color:"#fbbf24",marginLeft:3}}>✏</span>}</>:"—"}
+                {r.htUSD>0?<>{fUSD(r.htUSD)}{r.hasHtOverride&&<span style={{fontSize:8,color:"#fbbf24",marginLeft:3}}>✏</span>}</>:"—"}
               </td>
               <td style={{padding:"8px 12px",color:pctColor(r.pnlUSD),fontWeight:700}}>
                 {r.pnlPct!==null?(r.pnlUSD>=0?"+":"")+fUSD(r.pnlUSD):"—"}
@@ -947,24 +962,37 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
       {/* Future edit modal */}
       {editCoin && (
         <div className="modal-overlay" onClick={()=>setEditCoin(null)}>
-          <div className="modal-box" onClick={e=>e.stopPropagation()}>
-            <h3 style={{color:COINS_DEF.find(c=>c.id===editCoin)?.color||"#38bdf8",marginBottom:4,fontSize:15}}>🤖 Future — {editCoin}</h3>
-            {[{l:"Số lượng coin",k:"soLuong",p:"VD: 0.05"},{l:"Giá mua TB (USD)",k:"giaMuaTB",p:"VD: 60000"},{l:"Grid Profit (USD)",k:"gridProfit",p:"VD: 150"}].map(f=>(
-              <div key={f.k} style={{marginBottom:10}}>
-                <label style={labelS}>{f.l}</label>
-                <input style={inputS} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p} type="number"/>
+          <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:440,maxHeight:"85vh",overflowY:"auto"}}>
+            <h3 style={{color:COINS_DEF.find(c=>c.id===editCoin)?.color||"#38bdf8",marginBottom:12,fontSize:15}}>🤖 Future — {editCoin}</h3>
+            {formRecords.map((rec,i)=>(
+              <div key={rec.id} style={{background:"#0f172a",borderRadius:8,padding:12,marginBottom:10,border:"1px solid #334155"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:11,color:"#64748b",fontWeight:600}}>Lần #{i+1}</span>
+                  {formRecords.length>1&&<button onClick={()=>delFormRec(rec.id)} style={{padding:"1px 7px",borderRadius:4,border:"none",background:"#7f1d1d",color:"#fca5a5",cursor:"pointer",fontSize:11}}>Xóa</button>}
+                </div>
+                {[{l:"Số lượng coin",k:"soLuong",p:"VD: 0.05"},{l:"Giá mua TB (USD)",k:"giaMuaTB",p:"VD: 60000"},{l:"Grid Profit (USD)",k:"gridProfit",p:"VD: 150"}].map(f=>(
+                  <div key={f.k} style={{marginBottom:8}}>
+                    <label style={labelS}>{f.l}</label>
+                    <input style={inputS} value={rec[f.k]} onChange={e=>updFormRec(rec.id,f.k,e.target.value)} placeholder={f.p} type="number"/>
+                  </div>
+                ))}
+                <div style={{borderTop:"1px solid #1e293b",margin:"8px 0 6px",paddingTop:8}}>
+                  <div style={{fontSize:10,color:"#64748b",marginBottom:6}}>✏ Ghi đè thủ công — để trống sẽ tự tính</div>
+                  {[{l:"Vốn (USD)",k:"vonOverride"},{l:"Giá trị HT (USD)",k:"htOverride"}].map(f=>(
+                    <div key={f.k} style={{marginBottom:8}}>
+                      <label style={labelS}>{f.l}</label>
+                      <input style={{...inputS,borderColor:rec[f.k]?"#fbbf24":"#1e293b"}} value={rec[f.k]} onChange={e=>updFormRec(rec.id,f.k,e.target.value)} placeholder="Để trống = tự tính" type="number"/>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <label style={labelS}>Ghi chú</label>
+                  <input style={inputS} value={rec.ghiChu} onChange={e=>updFormRec(rec.id,"ghiChu",e.target.value)} placeholder="VD: DCA tháng 1" type="text"/>
+                </div>
               </div>
             ))}
-            <div style={{borderTop:"1px solid #1e293b",margin:"10px 0 8px",paddingTop:10}}>
-              <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>✏ Ghi đè thủ công — để trống sẽ tự tính</div>
-              {[{l:"Vốn (USD)",k:"vonOverride"},{l:"Giá trị HT (USD)",k:"htOverride"}].map(f=>(
-                <div key={f.k} style={{marginBottom:10}}>
-                  <label style={labelS}>{f.l}</label>
-                  <input style={{...inputS,borderColor:form[f.k]?"#fbbf24":"#1e293b"}} value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder="Để trống = tự tính" type="number"/>
-                </div>
-              ))}
-            </div>
-            <div style={{display:"flex",gap:8,marginTop:4}}>
+            <button onClick={addFormRec} style={{width:"100%",padding:"8px",borderRadius:7,border:"1px dashed #334155",background:"transparent",color:"#64748b",cursor:"pointer",fontSize:12,marginBottom:12}}>+ Thêm lần đầu tư</button>
+            <div style={{display:"flex",gap:8}}>
               <button onClick={saveHolding} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#7c3aed,#3b82f6)",color:"#fff",fontWeight:700,cursor:"pointer"}}>Lưu</button>
               <button onClick={()=>setEditCoin(null)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
             </div>
@@ -975,24 +1003,37 @@ function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCr
       {/* Spot edit modal */}
       {editSpotCoin && (
         <div className="modal-overlay" onClick={()=>setEditSpotCoin(null)}>
-          <div className="modal-box" onClick={e=>e.stopPropagation()}>
-            <h3 style={{color:COINS_DEF.find(c=>c.id===editSpotCoin)?.color||"#4ade80",marginBottom:4,fontSize:15}}>🟢 Spot — {editSpotCoin}</h3>
-            {[{l:"Số lượng coin",k:"soLuong",p:"VD: 0.05"},{l:"Giá mua TB (USD)",k:"giaMuaTB",p:"VD: 60000"},{l:"Grid Profit (USD)",k:"gridProfit",p:"VD: 150"}].map(f=>(
-              <div key={f.k} style={{marginBottom:10}}>
-                <label style={labelS}>{f.l}</label>
-                <input style={inputS} value={spotForm[f.k]} onChange={e=>setSpotForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.p} type="number"/>
+          <div className="modal-box" onClick={e=>e.stopPropagation()} style={{width:440,maxHeight:"85vh",overflowY:"auto"}}>
+            <h3 style={{color:COINS_DEF.find(c=>c.id===editSpotCoin)?.color||"#4ade80",marginBottom:12,fontSize:15}}>🟢 Spot — {editSpotCoin}</h3>
+            {spotFormRecords.map((rec,i)=>(
+              <div key={rec.id} style={{background:"#0f172a",borderRadius:8,padding:12,marginBottom:10,border:"1px solid #334155"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <span style={{fontSize:11,color:"#64748b",fontWeight:600}}>Lần #{i+1}</span>
+                  {spotFormRecords.length>1&&<button onClick={()=>delSpotRec(rec.id)} style={{padding:"1px 7px",borderRadius:4,border:"none",background:"#7f1d1d",color:"#fca5a5",cursor:"pointer",fontSize:11}}>Xóa</button>}
+                </div>
+                {[{l:"Số lượng coin",k:"soLuong",p:"VD: 0.05"},{l:"Giá mua TB (USD)",k:"giaMuaTB",p:"VD: 60000"}].map(f=>(
+                  <div key={f.k} style={{marginBottom:8}}>
+                    <label style={labelS}>{f.l}</label>
+                    <input style={inputS} value={rec[f.k]} onChange={e=>updSpotRec(rec.id,f.k,e.target.value)} placeholder={f.p} type="number"/>
+                  </div>
+                ))}
+                <div style={{borderTop:"1px solid #1e293b",margin:"8px 0 6px",paddingTop:8}}>
+                  <div style={{fontSize:10,color:"#64748b",marginBottom:6}}>✏ Ghi đè thủ công — để trống sẽ tự tính</div>
+                  {[{l:"Vốn (USD)",k:"vonOverride"},{l:"Giá trị HT (USD)",k:"htOverride"}].map(f=>(
+                    <div key={f.k} style={{marginBottom:8}}>
+                      <label style={labelS}>{f.l}</label>
+                      <input style={{...inputS,borderColor:rec[f.k]?"#fbbf24":"#1e293b"}} value={rec[f.k]} onChange={e=>updSpotRec(rec.id,f.k,e.target.value)} placeholder="Để trống = tự tính" type="number"/>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <label style={labelS}>Ghi chú</label>
+                  <input style={inputS} value={rec.ghiChu} onChange={e=>updSpotRec(rec.id,"ghiChu",e.target.value)} placeholder="VD: Tích lũy dài hạn" type="text"/>
+                </div>
               </div>
             ))}
-            <div style={{borderTop:"1px solid #1e293b",margin:"10px 0 8px",paddingTop:10}}>
-              <div style={{fontSize:10,color:"#64748b",marginBottom:8}}>✏ Ghi đè thủ công — để trống sẽ tự tính</div>
-              {[{l:"Vốn (USD)",k:"vonOverride"},{l:"Giá trị HT (USD)",k:"htOverride"}].map(f=>(
-                <div key={f.k} style={{marginBottom:10}}>
-                  <label style={labelS}>{f.l}</label>
-                  <input style={{...inputS,borderColor:spotForm[f.k]?"#fbbf24":"#1e293b"}} value={spotForm[f.k]} onChange={e=>setSpotForm(p=>({...p,[f.k]:e.target.value}))} placeholder="Để trống = tự tính" type="number"/>
-                </div>
-              ))}
-            </div>
-            <div style={{display:"flex",gap:8,marginTop:4}}>
+            <button onClick={addSpotRec} style={{width:"100%",padding:"8px",borderRadius:7,border:"1px dashed #334155",background:"transparent",color:"#64748b",cursor:"pointer",fontSize:12,marginBottom:12}}>+ Thêm lần đầu tư</button>
+            <div style={{display:"flex",gap:8}}>
               <button onClick={saveSpot} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"linear-gradient(135deg,#065f46,#4ade80)",color:"#fff",fontWeight:700,cursor:"pointer"}}>Lưu</button>
               <button onClick={()=>setEditSpotCoin(null)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #334155",background:"transparent",color:"#94a3b8",cursor:"pointer"}}>Hủy</button>
             </div>
@@ -1815,7 +1856,7 @@ function TodoTab() {
 function FinanceTab({ prices, cryptoPrices, usdvnd }) {
   const [stockHoldings] = useLS("azfin_stock_holdings", []);
   const [cryptoHoldings] = useLS("azfin_crypto_holdings",
-    COINS_DEF.reduce((acc,c) => ({...acc,[c.id]:{soLuong:0,giaMuaTB:0,gridProfit:0}}),{}));
+    COINS_DEF.reduce((acc,c) => ({...acc,[c.id]:[]}),{}));
   const [otherInv, setOtherInv] = useLS("azfin_other_investments", []);
   const [cards]         = useLS("azfin_credit_cards", []);
   const [loans]         = useLS("azfin_loans", []);
@@ -1850,15 +1891,17 @@ function FinanceTab({ prices, cryptoPrices, usdvnd }) {
 
   // ── Crypto calculations (converted to VND) ──
   const cryptoRows = useMemo(() => COINS_DEF.map(c => {
-    const h = cryptoHoldings[c.id] || {soLuong:0,giaMuaTB:0,gridProfit:0};
+    const recs = getRecs(cryptoHoldings[c.id]);
     const priceUSD = cryptoPrices[c.binSym]?.price || 0;
-    const vonUSD = h.soLuong * h.giaMuaTB;
-    const htUSD  = h.soLuong * priceUSD;
+    const soLuong = recs.reduce((a,r)=>a+(r.soLuong||0),0);
+    const gridProfit = recs.reduce((a,r)=>a+(r.gridProfit||0),0);
+    const vonUSD = recs.reduce((a,r)=>a+(r.vonOverride!=null?r.vonOverride:(r.soLuong||0)*(r.giaMuaTB||0)),0);
+    const htUSD = priceUSD>0 ? soLuong*priceUSD : 0;
     const vonVND = vonUSD * usdvnd;
     const htVND  = priceUSD ? htUSD * usdvnd : vonVND;
-    const gridVND = (h.gridProfit||0) * usdvnd;
-    return { ...c, h, priceUSD, vonUSD, htUSD, vonVND, htVND, gridVND, hasPrice: !!priceUSD };
-  }).filter(r => r.h.soLuong > 0 || r.h.gridProfit > 0), [cryptoHoldings, cryptoPrices, usdvnd]);
+    const gridVND = gridProfit * usdvnd;
+    return { ...c, soLuong, gridProfit, priceUSD, vonUSD, htUSD, vonVND, htVND, gridVND, hasPrice: !!priceUSD };
+  }).filter(r => r.soLuong > 0 || r.gridProfit > 0), [cryptoHoldings, cryptoPrices, usdvnd]);
   const cryptoVon = cryptoRows.reduce((s,r)=>s+r.vonVND,0);
   const cryptoHT  = cryptoRows.reduce((s,r)=>s+r.htVND+r.gridVND,0);
   const cryptoPnl = cryptoHT - cryptoVon;
@@ -2148,8 +2191,8 @@ function FinanceTab({ prices, cryptoPrices, usdvnd }) {
                 {cryptoRows.map((r,i) => (
                   <tr key={r.id} style={{background:i%2===0?"#0a0f1e":"#0d1526"}}>
                     <td style={{padding:"7px 10px",fontWeight:700,color:r.color}}>{r.icon} {r.id}</td>
-                    <td style={{padding:"7px 10px",color:"#94a3b8",textAlign:"right"}}>{r.h.soLuong||"—"}</td>
-                    <td style={{padding:"7px 10px",color:"#94a3b8",textAlign:"right"}}>{r.h.giaMuaTB?fUSD(r.vonUSD):"—"}</td>
+                    <td style={{padding:"7px 10px",color:"#94a3b8",textAlign:"right"}}>{r.soLuong||"—"}</td>
+                    <td style={{padding:"7px 10px",color:"#94a3b8",textAlign:"right"}}>{r.vonUSD>0?fUSD(r.vonUSD):"—"}</td>
                     <td style={{padding:"7px 10px",color:"#e2e8f0",textAlign:"right"}}>{r.hasPrice?fUSD(r.priceUSD):"—"}</td>
                     <td style={{padding:"7px 10px",textAlign:"right",color:r.hasPrice?"#e2e8f0":"#475569"}}>
                       {r.hasPrice ? fM(r.htVND + r.gridVND) : "—"}
