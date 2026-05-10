@@ -3417,14 +3417,19 @@ function App() {
   const load = useCallback(async () => {
     const logArr=[];
     const addLog = msg => { logArr.push(msg); setLastLog(msg); setLogs([...logArr]); };
-    const customStocks = JSON.parse(localStorage.getItem("azfin_custom_stocks") || "[]");
-    const customSyms = customStocks.map(s => s.ma).filter(ma => !ALL_SYMBOLS.includes(ma));
     const { map, source } = await fetchPrices(ALL_SYMBOLS, addLog);
-    if (customSyms.length > 0) {
-      const customMap = await fetchCustomPrices(customSyms);
-      Object.assign(map, customMap);
-    }
     if (Object.keys(map).length) { setPrices(map); setSource(source); setUpdated(new Date()); updateATH(map); }
+    try {
+      const customStocks = JSON.parse(localStorage.getItem("azfin_custom_stocks") || "[]");
+      const customSyms = customStocks.map(s => s.ma).filter(ma => !ALL_SYMBOLS.includes(ma));
+      if (customSyms.length > 0) {
+        const customMap = await fetchCustomPrices(customSyms);
+        if (Object.keys(customMap).length > 0) {
+          setPrices(prev => ({...prev, ...customMap}));
+          updateATH(customMap);
+        }
+      }
+    } catch {}
   }, [updateATH]);
 
   const loadCrypto = useCallback(async () => {
