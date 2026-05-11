@@ -749,7 +749,7 @@ function StockPortfolio({ prices }) {
 // ── SECTION: Crypto Portfolio ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 const parseOvr = v => (v!=null&&String(v).trim()!=="")?parseFloat(v):null;
-const getRecs = raw => Array.isArray(raw) ? raw : (raw && (raw.soLuong||raw.giaMuaTB||raw.gridProfit) ? [{id:1,soLuong:raw.soLuong||0,giaMuaTB:raw.giaMuaTB||0,gridProfit:raw.gridProfit||0,vonOverride:raw.vonOverride??null,htOverride:raw.htOverride??null,ghiChu:""}] : []);
+const getRecs = raw => Array.isArray(raw) ? raw : (raw && (raw.soLuong||raw.giaMuaTB||raw.gridProfit||raw.vonOverride||raw.htOverride) ? [{id:1,soLuong:raw.soLuong||0,giaMuaTB:raw.giaMuaTB||0,gridProfit:raw.gridProfit||0,vonOverride:raw.vonOverride??null,htOverride:raw.htOverride??null,ghiChu:""}] : []);
 function CryptoSection({ usdvnd, cryptoPrices, setCryptoPrices, cryptoAth, setCryptoAth }) {
   const emptyHoldings = COINS_DEF.reduce((acc,c) => ({...acc,[c.id]:[]}),{});
   const [holdings, setHoldings] = useLS("azfin_crypto_holdings", emptyHoldings);
@@ -1855,8 +1855,9 @@ function TodoTab() {
 // ══════════════════════════════════════════════════════════════════════════════
 function FinanceTab({ prices, cryptoPrices, usdvnd }) {
   const [stockHoldings] = useLS("azfin_stock_holdings", []);
-  const [cryptoHoldings] = useLS("azfin_crypto_holdings",
-    COINS_DEF.reduce((acc,c) => ({...acc,[c.id]:[]}),{}));
+  const emptyCS = COINS_DEF.reduce((acc,c) => ({...acc,[c.id]:[]}),{});
+  const [cryptoHoldings] = useLS("azfin_crypto_holdings", emptyCS);
+  const [cryptoSpotHoldings] = useLS("azfin_crypto_spot_holdings", emptyCS);
   const [otherInv, setOtherInv] = useLS("azfin_other_investments", []);
   const [cards]         = useLS("azfin_credit_cards", []);
   const [loans]         = useLS("azfin_loans", []);
@@ -1889,19 +1890,24 @@ function FinanceTab({ prices, cryptoPrices, usdvnd }) {
   const stockHT  = stockRows.reduce((s,r)=>s+r.htVND,0);
   const stockPnl = stockHT - stockVon;
 
-  // ── Crypto calculations (converted to VND) ──
+  // ── Crypto calculations (Future + Spot, converted to VND) ──
   const cryptoRows = useMemo(() => COINS_DEF.map(c => {
-    const recs = getRecs(cryptoHoldings[c.id]);
-    const priceUSD = cryptoPrices[c.binSym]?.price || 0;
-    const soLuong = recs.reduce((a,r)=>a+(r.soLuong||0),0);
-    const gridProfit = recs.reduce((a,r)=>a+(r.gridProfit||0),0);
-    const vonUSD = recs.reduce((a,r)=>a+(r.vonOverride!=null?r.vonOverride:(r.soLuong||0)*(r.giaMuaTB||0)),0);
-    const htUSD = priceUSD>0 ? soLuong*priceUSD : 0;
+    const fRecs = getRecs(cryptoHoldings[c.id]);
+    const sRecs = getRecs(cryptoSpotHoldings[c.id]);
+    const allRecs = [...fRecs, ...sRecs];
+    const priceUSD = cryptoPrices[c.id]?.price || 0;
+    const soLuong = allRecs.reduce((a,r)=>a+(r.soLuong||0),0);
+    const gridProfit = allRecs.reduce((a,r)=>a+(r.gridProfit||0),0);
+    const vonUSD = allRecs.reduce((a,r)=>a+(r.vonOverride!=null?r.vonOverride:(r.soLuong||0)*(r.giaMuaTB||0)),0);
+    const htUSDauto = priceUSD>0 ? soLuong*priceUSD : 0;
+    const htOverride = allRecs.reduce((a,r)=>r.htOverride!=null?a+(r.htOverride||0):a, 0);
+    const hasHtOverride = allRecs.some(r=>r.htOverride!=null);
+    const htUSD = hasHtOverride ? htOverride : htUSDauto;
     const vonVND = vonUSD * usdvnd;
-    const htVND  = priceUSD ? htUSD * usdvnd : vonVND;
+    const htVND  = htUSD > 0 ? htUSD * usdvnd : vonVND;
     const gridVND = gridProfit * usdvnd;
     return { ...c, soLuong, gridProfit, priceUSD, vonUSD, htUSD, vonVND, htVND, gridVND, hasPrice: !!priceUSD };
-  }).filter(r => r.soLuong > 0 || r.gridProfit > 0), [cryptoHoldings, cryptoPrices, usdvnd]);
+  }).filter(r => r.vonUSD > 0 || r.soLuong > 0 || r.gridProfit > 0), [cryptoHoldings, cryptoSpotHoldings, cryptoPrices, usdvnd]);
   const cryptoVon = cryptoRows.reduce((s,r)=>s+r.vonVND,0);
   const cryptoHT  = cryptoRows.reduce((s,r)=>s+r.htVND+r.gridVND,0);
   const cryptoPnl = cryptoHT - cryptoVon;
