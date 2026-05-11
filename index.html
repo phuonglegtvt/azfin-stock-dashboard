@@ -1653,6 +1653,24 @@ function TodoTab() {
   };
   const delEvt = id => setEvents(events.filter(e=>e.id!==id));
 
+  const getEventPeriod = (ngay) => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const d = new Date(ngay); d.setHours(0,0,0,0);
+    const diff = Math.round((d - today) / 86400000);
+    if (diff < 0) return null;
+    if (diff === 0) return "day";
+    if (diff <= 7) return "week";
+    if (d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth()) return "month";
+    if (d.getFullYear() === today.getFullYear()) return "year";
+    return null;
+  };
+
+  const eventsByPeriod = useMemo(() => {
+    const map = {day:[], week:[], month:[], year:[]};
+    events.forEach(e => { const p = getEventPeriod(e.ngay); if (p) map[p].push(e); });
+    return map;
+  }, [events]);
+
   const sorted = useMemo(() => [...events].sort((a,b)=>a.ngay.localeCompare(b.ngay)||a.gio.localeCompare(b.gio)), [events]);
   const futureEvts = sorted.filter(e => diffDays(e.ngay) >= 0);
   const pastEvts   = sorted.filter(e => diffDays(e.ngay) < 0).reverse();
@@ -1714,6 +1732,7 @@ function TodoTab() {
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
           {PERIODS.map(({key, l, color}) => {
             const items = todos[key] || [];
+            const evts = eventsByPeriod[key] || [];
             const doneCount = items.filter(t=>t.done).length;
             return (
               <div key={key} style={{background:"#1e293b",borderRadius:10,padding:"14px 16px",borderTop:`3px solid ${color}`}}>
@@ -1722,7 +1741,29 @@ function TodoTab() {
                   {items.length > 0 && (
                     <span style={{fontSize:10,color:"#475569",background:"#0f172a",borderRadius:10,padding:"1px 8px"}}>{doneCount}/{items.length}</span>
                   )}
+                  {evts.length > 0 && (
+                    <span style={{fontSize:10,color:"#fb923c",background:"#0f172a",borderRadius:10,padding:"1px 8px"}}>📅 {evts.length}</span>
+                  )}
                 </div>
+                {evts.length > 0 && (
+                  <div style={{marginBottom:10}}>
+                    {evts.map(e => {
+                      const cat = getCat(e.danhMuc);
+                      const diff = diffDays(e.ngay);
+                      return (
+                        <div key={e.id} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",marginBottom:4,borderRadius:6,background:"#0f172a",borderLeft:`3px solid ${cat.c}`,cursor:"pointer"}}
+                          onClick={()=>{ setSubTab("calendar"); }}>
+                          <span style={{fontSize:11,flexShrink:0}}>{cat.l.split(" ")[0]}</span>
+                          <span style={{flex:1,fontSize:11,color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.tieuDe}</span>
+                          {diff === 0
+                            ? <span style={{fontSize:9,fontWeight:700,color:"#fbbf24",background:"#431407",borderRadius:20,padding:"1px 6px",flexShrink:0}}>Hôm nay</span>
+                            : <span style={{fontSize:9,color:"#64748b",flexShrink:0}}>{fDate(e.ngay)}</span>
+                          }
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 <div style={{display:"flex",gap:6,marginBottom:10}}>
                   <input value={inputs[key]}
                     onChange={e => setInputs(prev=>({...prev,[key]:e.target.value}))}
@@ -1734,7 +1775,7 @@ function TodoTab() {
                     style={{background:color,color:"#000",border:"none",borderRadius:6,padding:"5px 14px",fontSize:16,cursor:"pointer",fontWeight:700,lineHeight:1}}>+</button>
                 </div>
                 <div>
-                  {items.length === 0 && <div style={{fontSize:11,color:"#334155",textAlign:"center",padding:"10px 0"}}>Chưa có công việc</div>}
+                  {items.length === 0 && evts.length === 0 && <div style={{fontSize:11,color:"#334155",textAlign:"center",padding:"10px 0"}}>Chưa có công việc</div>}
                   {items.map(t => (
                     <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid #0f172a"}}>
                       <div onClick={() => toggleTodo(key,t.id)}
