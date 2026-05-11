@@ -223,6 +223,24 @@ async function fetchHistoricalATH() {
   return await r.json();
 }
 
+async function fetchUsdVndRate() {
+  try {
+    const r = await fetch("https://open.er-api.com/v6/latest/USD");
+    if (r.ok) {
+      const d = await r.json();
+      if (d?.rates?.VND > 0) return Math.round(d.rates.VND);
+    }
+  } catch {}
+  try {
+    const r = await fetch("https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json");
+    if (r.ok) {
+      const d = await r.json();
+      if (d?.usd?.vnd > 0) return Math.round(d.usd.vnd);
+    }
+  } catch {}
+  return null;
+}
+
 async function fetchCustomPrices(symbols) {
   for (const fn of [trySSI, tryDNSE, tryVNDirect]) {
     try {
@@ -3448,6 +3466,7 @@ function App() {
   const [showLog, setShowLog] = useState(false);
   const [now, setNow] = useState(new Date());
   const [usdvnd, setUsdvnd] = useLS("azfin_usdvnd", 25500);
+  const [usdvndAuto, setUsdvndAuto] = useState(false);
   const [athMap, setAthMap] = useLS("azfin_ath_v1", {});
   const [athLoading, setAthLoading] = useState(false);
   const [cryptoAth, setCryptoAth] = useLS("azfin_crypto_ath_v1", {});
@@ -3523,9 +3542,21 @@ function App() {
     });
   }, []);
 
+  const loadUsdVnd = useCallback(async () => {
+    const cacheTime = parseInt(localStorage.getItem('azfin_usdvnd_time') || '0');
+    if (Date.now() - cacheTime < 60 * 60 * 1000) return;
+    const rate = await fetchUsdVndRate();
+    if (rate && rate > 20000) {
+      setUsdvnd(rate);
+      setUsdvndAuto(true);
+      localStorage.setItem('azfin_usdvnd_time', String(Date.now()));
+    }
+  }, []);
+
   useEffect(() => { load(); const t=setInterval(load,60000); return ()=>clearInterval(t); },[load]);
   useEffect(() => { loadATH(); }, []);
   useEffect(() => { loadCrypto(); const t=setInterval(loadCrypto,60000); return ()=>clearInterval(t); },[loadCrypto]);
+  useEffect(() => { loadUsdVnd(); const t=setInterval(loadUsdVnd,30*60000); return ()=>clearInterval(t); },[loadUsdVnd]);
 
   useEffect(() => {
     if (!Object.keys(prices).length && !Object.keys(cryptoPrices).length) return;
@@ -3606,10 +3637,14 @@ function App() {
         </div>
         <button onClick={load} style={{padding:"3px 10px",borderRadius:6,border:"none",background:"#1e293b",color:"#64748b",cursor:"pointer",fontSize:11}}>↺ Làm mới</button>
         <button onClick={()=>setShowLog(v=>!v)} style={{padding:"3px 10px",borderRadius:6,border:"none",background:"#1e293b",color:"#64748b",cursor:"pointer",fontSize:11}}>🔍 Log</button>
-        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
           <span style={{fontSize:11,color:"#475569"}}>USD/VND:</span>
-          <input type="number" value={usdvnd} onChange={e=>setUsdvnd(parseInt(e.target.value)||25500)}
-            style={{width:80,padding:"3px 8px",borderRadius:6,border:"1px solid #334155",background:"#1e293b",color:"#e2e8f0",fontSize:11,outline:"none"}}/>
+          <input type="number" value={usdvnd} onChange={e=>{setUsdvnd(parseInt(e.target.value)||25500);setUsdvndAuto(false);localStorage.removeItem('azfin_usdvnd_time');}}
+            style={{width:80,padding:"3px 8px",borderRadius:6,border:`1px solid ${usdvndAuto?"#22c55e":"#334155"}`,background:"#1e293b",color:"#e2e8f0",fontSize:11,outline:"none"}}/>
+          {usdvndAuto
+            ? <span style={{fontSize:10,color:"#22c55e",whiteSpace:"nowrap"}}>● auto</span>
+            : <button onClick={()=>{localStorage.removeItem('azfin_usdvnd_time');loadUsdVnd();}} style={{fontSize:10,padding:"2px 6px",borderRadius:4,border:"1px solid #334155",background:"#1e293b",color:"#64748b",cursor:"pointer"}}>↺</button>
+          }
         </div>
       </div>
 
